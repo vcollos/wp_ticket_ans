@@ -37,6 +37,13 @@ class ANS_Tickets_Routes
             'permission_callback' => '__return_true',
         ]);
 
+        // Departamentos públicos (para formulário)
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/departamentos', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'list_departamentos_public'],
+            'permission_callback' => '__return_true',
+        ]);
+
         // Admin / Atendente
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/departamentos', [
             'methods' => 'GET',
@@ -135,9 +142,11 @@ class ANS_Tickets_Routes
         }
 
         $assunto = sanitize_text_field($req->get_param('assunto'));
-        $permitidos = ['atendimento', 'financeiro', 'comercial', 'assistencial', 'ouvidoria'];
-        if (!in_array($assunto, $permitidos, true)) {
-            return new WP_REST_Response(['error' => 'Assunto inválido'], 400);
+        
+        // Buscar departamento pelo slug
+        $departamento_id = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_departamentos} WHERE slug=%s AND ativo=1", $assunto));
+        if (!$departamento_id) {
+            return new WP_REST_Response(['error' => 'Departamento inválido ou inativo'], 400);
         }
 
         $wpdb->query('START TRANSACTION');
@@ -184,10 +193,6 @@ class ANS_Tickets_Routes
                 $update_data['cliente_uniodonto'] = $cliente_uniodonto;
                 $wpdb->update($table_clientes, $update_data, ['id' => $cliente_id]);
             }
-
-            // Departamento padrão
-            $dep_slug = $assunto === 'ouvidoria' ? 'ouvidoria' : ($assunto === 'assistencial' ? 'assistencial' : 'atendimento');
-            $departamento_id = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_departamentos} WHERE slug=%s", $dep_slug));
 
             // Protocolo
             $protocolo = ans_tickets_protocol();
@@ -534,5 +539,207 @@ class ANS_Tickets_Routes
             'tamanho_bytes' => filesize(get_attached_file($upload)),
         ]);
         return ['attachment_id' => $upload, 'url' => wp_get_attachment_url($upload)];
+    }
+
+    public static function recover_tickets(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table_tickets = ans_tickets_table('tickets');
+        $table_clientes = ans_tickets_table('clientes');
+        
+        $doc = preg_replace('/\D/', '', $req->get_param('documento'));
+        $data_nascimento = sanitize_text_field($req->get_param('data_nascimento'));
+        
+        if (!$doc || !$data_nascimento) {
+            return new WP_REST_Response(['error' => 'CPF e Data de Nascimento são obrigatórios'], 400);
+        }
+        
+        $cliente = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table_clientes} WHERE documento=%s AND data_nascimento=%s",
+            $doc,
+            $data_nascimento
+        ), ARRAY_A);
+        
+        if (!$cliente) {
+            return new WP_REST_Response(['error' => 'Nenhum chamado encontrado com esses dados'], 404);
+        }
+        
+        $tickets = $wpdb->get_results($wpdb->prepare(
+            "SELECT t.*, d.nome AS departamento_nome FROM {$table_tickets} t 
+            LEFT JOIN " . ans_tickets_table('departamentos') . " d ON t.departamento_id = d.id 
+            WHERE t.cliente_id=%d ORDER BY t.created_at DESC",
+            $cliente['id']
+        ), ARRAY_A);
+        
+        return new WP_REST_Response([
+            'cliente' => $cliente,
+            'tickets' => $tickets
+        ], 200);
+    }
+
+    public static function list_departamentos_public(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $rows = $wpdb->get_results("SELECT id, nome, slug, ordem_fluxo FROM {$table} WHERE ativo=1 ORDER BY ordem_fluxo ASC");
+        return $rows;
+    }
+
+    public static function list_departamentos(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
+        $rows = $wpdb->get_results("SELECT * FROM {$table} ORDER BY ordem_fluxo ASC");
+        
+        foreach ($rows as &$row) {
+            $users = $wpdb->get_col($wpdb->prepare(
+                "SELECT user_id FROM {$table_users} WHERE departamento_id=%d",
+                $row->id
+            ));
+            $row->users = $users;
+        }
+        
+        return $rows;
+    }
+
+    public static function get_departamento(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
+        $id = (int)$req['id'];
+        
+        $dept = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A);
+        if (!$dept) {
+            return new WP_REST_Response(['error' => 'Departamento não encontrado'], 404);
+        }
+        
+        $users = $wpdb->get_col($wpdb->prepare(
+            "SELECT user_id FROM {$table_users} WHERE departamento_id=%d",
+            $id
+        ));
+        $dept['users'] = $users;
+        
+        return $dept;
+    }
+
+    public static function create_departamento(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
+        
+        $data = [
+            'nome' => sanitize_text_field($req->get_param('nome')),
+            'slug' => sanitize_text_field($req->get_param('slug')),
+            'ordem_fluxo' => (int)$req->get_param('ordem_fluxo') ?: 1,
+            'cor' => sanitize_text_field($req->get_param('cor')),
+            'sla_hours' => $req->get_param('sla_hours') ? (int)$req->get_param('sla_hours') : null,
+            'ativo' => $req->get_param('ativo') ? 1 : 0,
+        ];
+        
+        $inserted = $wpdb->insert($table, $data);
+        if ($inserted === false) {
+            return new WP_REST_Response(['error' => 'Erro ao criar departamento: ' . $wpdb->last_error], 500);
+        }
+        
+        $dept_id = $wpdb->insert_id;
+        $users = $req->get_param('users') ?: [];
+        
+        foreach ($users as $user_id) {
+            $wpdb->insert($table_users, [
+                'departamento_id' => $dept_id,
+                'user_id' => (int)$user_id,
+            ]);
+        }
+        
+        return new WP_REST_Response(['id' => $dept_id, 'message' => 'Departamento criado com sucesso'], 200);
+    }
+
+    public static function update_departamento(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
+        $id = (int)$req['id'];
+        
+        $data = [];
+        if ($req->get_param('nome')) {
+            $data['nome'] = sanitize_text_field($req->get_param('nome'));
+        }
+        if ($req->get_param('slug')) {
+            $data['slug'] = sanitize_text_field($req->get_param('slug'));
+        }
+        if ($req->get_param('ordem_fluxo')) {
+            $data['ordem_fluxo'] = (int)$req->get_param('ordem_fluxo');
+        }
+        if ($req->get_param('cor')) {
+            $data['cor'] = sanitize_text_field($req->get_param('cor'));
+        }
+        if ($req->get_param('sla_hours') !== null) {
+            $data['sla_hours'] = $req->get_param('sla_hours') ? (int)$req->get_param('sla_hours') : null;
+        }
+        if ($req->get_param('ativo') !== null) {
+            $data['ativo'] = $req->get_param('ativo') ? 1 : 0;
+        }
+        
+        if (!empty($data)) {
+            $data['updated_at'] = current_time('mysql');
+            $updated = $wpdb->update($table, $data, ['id' => $id]);
+            if ($updated === false) {
+                return new WP_REST_Response(['error' => 'Erro ao atualizar departamento: ' . $wpdb->last_error], 500);
+            }
+        }
+        
+        // Atualizar usuários
+        if ($req->get_param('users') !== null) {
+            $wpdb->delete($table_users, ['departamento_id' => $id]);
+            $users = $req->get_param('users') ?: [];
+            foreach ($users as $user_id) {
+                $wpdb->insert($table_users, [
+                    'departamento_id' => $id,
+                    'user_id' => (int)$user_id,
+                ]);
+            }
+        }
+        
+        return new WP_REST_Response(['message' => 'Departamento atualizado com sucesso'], 200);
+    }
+
+    public static function delete_departamento(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $table_tickets = ans_tickets_table('tickets');
+        $table_users = ans_tickets_table('departamento_users');
+        $id = (int)$req['id'];
+        
+        // Verificar se há tickets abertos
+        $tickets_abertos = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$table_tickets} WHERE departamento_id=%d AND status NOT IN ('concluido', 'arquivado')",
+            $id
+        ));
+        
+        if ($tickets_abertos > 0) {
+            $transfer_to = (int)$req->get_param('transfer_to');
+            if (!$transfer_to) {
+                return new WP_REST_Response(['error' => 'É necessário selecionar um departamento para transferir os chamados abertos'], 400);
+            }
+            
+            // Transferir tickets
+            $wpdb->update($table_tickets, ['departamento_id' => $transfer_to], ['departamento_id' => $id]);
+        }
+        
+        // Remover usuários do departamento
+        $wpdb->delete($table_users, ['departamento_id' => $id]);
+        
+        // Excluir departamento
+        $deleted = $wpdb->delete($table, ['id' => $id]);
+        if ($deleted === false) {
+            return new WP_REST_Response(['error' => 'Erro ao excluir departamento: ' . $wpdb->last_error], 500);
+        }
+        
+        return new WP_REST_Response(['message' => 'Departamento excluído com sucesso'], 200);
     }
 }

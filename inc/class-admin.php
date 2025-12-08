@@ -331,14 +331,19 @@ class ANS_Tickets_Admin
 
     public static function render_settings_page(): void
     {
+        if (isset($_POST['ans_tickets_settings']) && check_admin_referer('ans_tickets_settings', 'ans_tickets_settings_nonce')) {
+            update_option(ANS_TICKETS_OPTION, $_POST['ans_tickets_settings']);
+            echo '<div class="notice notice-success"><p>Configurações salvas com sucesso!</p></div>';
+        }
+        
         $settings = get_option(ANS_TICKETS_OPTION, []);
         $sac_page = $settings['sac_page'] ?? '';
         $dashboard_page = $settings['dashboard_page'] ?? '';
         ?>
         <div class="wrap">
             <h1>Configurações - ANS Tickets</h1>
-            <form method="post" action="options.php">
-                <?php settings_fields('ans_tickets_settings'); ?>
+            <form method="post" action="">
+                <?php wp_nonce_field('ans_tickets_settings', 'ans_tickets_settings_nonce'); ?>
                 <table class="form-table">
                     <tr>
                         <th><label for="sac_page">Página do SAC</label></th>

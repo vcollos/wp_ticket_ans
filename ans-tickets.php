@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.1.1
+ * Version: 0.2.0
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.1.1');
+define('ANS_TICKETS_VERSION', '0.2.0');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -25,11 +25,9 @@ require_once ANS_TICKETS_PATH . 'inc/class-admin.php';
 require_once ANS_TICKETS_PATH . 'inc/helpers.php';
 
 register_activation_hook(__FILE__, ['ANS_Tickets_Installer', 'activate']);
+add_action('plugins_loaded', ['ANS_Tickets_Installer', 'maybe_update']);
 
 add_action('rest_api_init', ['ANS_Tickets_Routes', 'register']);
-add_action('admin_init', function() {
-    register_setting('ans_tickets_settings', ANS_TICKETS_OPTION);
-});
 ANS_Tickets_Admin::init();
 
 // Shortcode: formulário de abertura
@@ -45,6 +43,14 @@ add_shortcode('ans_ticket_form', function () {
         <h3>Novo Atendimento</h3>
         <form>
             <div class="ans-grid">
+                <label class="full">
+                    Você é cliente Uniodonto?
+                    <select name="cliente_uniodonto" id="ans-cliente-uniodonto" required>
+                        <option value="">Selecione</option>
+                        <option value="true">Sim</option>
+                        <option value="false">Não</option>
+                    </select>
+                </label>
                 <label class="full">Nome Completo
                     <input name="nome_completo" required>
                 </label>
@@ -54,16 +60,18 @@ add_shortcode('ans_ticket_form', function () {
                 <label class="half">Telefone
                     <input name="telefone" required>
                 </label>
+                <label class="half">WhatsApp
+                    <input name="whatsapp" required>
+                </label>
                 <label class="half">Documento (CPF/CNPJ)
                     <input name="documento" required>
                 </label>
+                <label class="half">Data de Nascimento
+                    <input name="data_nascimento" type="date" required>
+                </label>
                 <label class="full">Assunto
                     <select name="assunto" id="ans-assunto" required>
-                        <option value="atendimento">Atendimento</option>
-                        <option value="financeiro">Financeiro</option>
-                        <option value="comercial">Comercial</option>
-                        <option value="assistencial">Assistencial</option>
-                        <option value="ouvidoria">Ouvidoria</option>
+                        <option value="">Selecione um assunto</option>
                     </select>
                 </label>
                 <label class="full">Descrição
@@ -109,11 +117,22 @@ add_shortcode('ans_ticket_track', function () {
     <div id="ans-ticket-track" class="ans-ticket-card">
         <h3>Acompanhar Protocolo</h3>
         <form class="track-form">
-            <label>Protocolo<input name="protocolo" required></label>
-            <label>Documento (CPF/CNPJ)<input name="documento" required></label>
+            <label>Protocolo<input name="protocolo"></label>
+            <label>Documento (CPF/CNPJ)<input name="documento"></label>
+            <label>Data de Nascimento<input name="data_nascimento" type="date"></label>
             <button type="submit">Consultar</button>
         </form>
         <div class="ans-ticket-details" style="display:none"></div>
+    </div>
+    <div id="ans-ticket-recover" class="ans-ticket-card" style="margin-top: 20px;">
+        <h3>Recuperar Meus Chamados</h3>
+        <p>Esqueceu o protocolo? Informe seu CPF e data de nascimento para recuperar todos os seus chamados.</p>
+        <form class="recover-form">
+            <label>CPF<input name="documento" required></label>
+            <label>Data de Nascimento<input name="data_nascimento" type="date" required></label>
+            <button type="submit">Recuperar Chamados</button>
+        </form>
+        <div class="ans-ticket-recover-results" style="display:none"></div>
     </div>
     <?php
     return ob_get_clean();

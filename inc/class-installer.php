@@ -180,4 +180,47 @@ CREATE TABLE {$prefix}departamento_users (
             'post_type' => 'page',
         ]);
     }
+
+    public static function maybe_update(): void
+    {
+        $installed_version = get_option('ans_tickets_version', '0.0.0');
+        if (version_compare($installed_version, ANS_TICKETS_VERSION, '<')) {
+            self::update_database();
+            update_option('ans_tickets_version', ANS_TICKETS_VERSION);
+        }
+    }
+
+    private static function update_database(): void
+    {
+        global $wpdb;
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        $charset = $wpdb->get_charset_collate();
+        $prefix = $wpdb->prefix . 'ans_';
+
+        // Verificar e adicionar novos campos na tabela clientes
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM {$prefix}clientes");
+        
+        if (!in_array('whatsapp', $columns)) {
+            $wpdb->query("ALTER TABLE {$prefix}clientes ADD COLUMN whatsapp VARCHAR(30) AFTER telefone");
+        }
+        if (!in_array('data_nascimento', $columns)) {
+            $wpdb->query("ALTER TABLE {$prefix}clientes ADD COLUMN data_nascimento DATE AFTER documento");
+        }
+        if (!in_array('cliente_uniodonto', $columns)) {
+            $wpdb->query("ALTER TABLE {$prefix}clientes ADD COLUMN cliente_uniodonto BOOLEAN DEFAULT FALSE AFTER data_nascimento");
+        }
+
+        // Criar tabela de relacionamento departamento_users se não existir
+        $table_users = "CREATE TABLE IF NOT EXISTS {$prefix}departamento_users (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            departamento_id BIGINT UNSIGNED NOT NULL,
+            user_id BIGINT UNSIGNED NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY dept_user (departamento_id, user_id),
+            KEY departamento_id (departamento_id),
+            KEY user_id (user_id)
+        ) $charset;";
+        dbDelta($table_users);
+    }
 }
