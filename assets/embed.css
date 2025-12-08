@@ -1,0 +1,18 @@
+.ans-ticket-card{border:1px solid #e0e4ea;border-radius:8px;padding:16px;background:#fafbfd;color:#13233a;font-family:system-ui,-apple-system,sans-serif;max-width:900px}
+.ans-ticket-card h3{margin-top:0;margin-bottom:12px;font-size:22px;color:#0b1b2b}
+.ans-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ans-grid .full{grid-column:1/-1}
+.ans-grid label{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:14px;color:#1e2a3a}
+.ans-grid input,.ans-grid select,.ans-grid textarea{width:100%;padding:10px 12px;border:1px solid #cdd5df;border-radius:6px;font-size:14px;background:#fff}
+.ans-grid textarea{min-height:120px;resize:vertical}
+.assist-block{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:10px;border:1px dashed #cdd5df;border-radius:8px;background:#f6f8fb}
+.ans-actions{margin-top:12px;text-align:right}
+.ans-btn{background:#9c0059;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-weight:700;cursor:pointer}
+.ans-btn:hover{background:#7c0047}
+.ans-ticket-result{margin-top:12px;padding:10px;border-radius:6px;background:#e8f6e8;color:#0b6d0b;font-weight:600}
+#ans-ticket-track{margin-top:20px}
+#ans-ticket-track form{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+#ans-ticket-track label{font-weight:600;color:#1e2a3a}
+#ans-ticket-track input{padding:8px 10px;border:1px solid #cdd5df;border-radius:6px}
+#ans-ticket-track button{background:#9c0059;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer}
+.ans-ticket-details{margin-top:12px;padding:12px;border:1px solid #e0e4ea;border-radius:8px;background:#fff}
