@@ -12,9 +12,17 @@ function ans_tickets_table(string $name): string
 function ans_tickets_protocol(): string
 {
     global $wpdb;
-    $operadora_table = ans_tickets_table('operadora');
-    $ans = $wpdb->get_var("SELECT ans_registro FROM {$operadora_table} LIMIT 1");
-    $ans = str_pad(preg_replace('/\D/', '', (string)$ans), 6, '0', STR_PAD_RIGHT);
+    $settings = get_option(ANS_TICKETS_OPTION, []);
+    $ans = $settings['ans_registro'] ?? '';
+    $ans = preg_replace('/\D/', '', (string)$ans);
+
+    if (!$ans) {
+        $operadora_table = ans_tickets_table('operadora');
+        $ans = $wpdb->get_var("SELECT ans_registro FROM {$operadora_table} LIMIT 1");
+        $ans = preg_replace('/\D/', '', (string)$ans);
+    }
+
+    $ans = str_pad($ans, 6, '0', STR_PAD_RIGHT);
     $date = current_time('Ymd');
     $seq = get_option('ans_tickets_seq_' . $date);
     if (!$seq) {

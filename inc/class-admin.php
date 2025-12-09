@@ -25,11 +25,11 @@ class ANS_Tickets_Admin
 
         add_submenu_page(
             'ans-tickets',
-            'Departamentos',
-            'Departamentos',
+            'Chamados (lista)',
+            'Chamados',
             'manage_options',
-            'ans-tickets-departamentos',
-            [self::class, 'render_departamentos_page']
+            'ans-tickets-list',
+            [self::class, 'render_list_page']
         );
 
         add_submenu_page(
@@ -38,7 +38,7 @@ class ANS_Tickets_Admin
             'Configurações',
             'manage_options',
             'ans-tickets-settings',
-            [self::class, 'render_settings_page']
+            [self::class, 'render_departamentos_page']
         );
     }
 
@@ -88,11 +88,62 @@ class ANS_Tickets_Admin
         <?php
     }
 
+    public static function render_list_page(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado');
+        }
+        require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+        $table = new ANS_Tickets_List_Table();
+        $table->prepare_items();
+        ?>
+        <div class="wrap">
+            <h1>Chamados</h1>
+            <form method="post">
+                <?php $table->search_box('Buscar', 'ans_ticket_search'); ?>
+                <?php $table->display(); ?>
+            </form>
+        </div>
+        <?php
+    }
+
     public static function render_departamentos_page(): void
     {
         ?>
         <div class="wrap">
-            <h1>Departamentos</h1>
+            <h1>Configurações Gerais</h1>
+            <div class="ans-config-grid">
+                <div class="ans-config-card ans-card-highlight">
+                    <h2>Shortcodes</h2>
+                    <p class="description">Use estes shortcodes para exibir os formulários no site.</p>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><span>Formulário de abertura</span></div>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><span>Acompanhar / Recuperar chamados</span></div>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><span>Dashboard de atendentes (requer login/permissão)</span></div>
+                </div>
+                <div class="ans-config-card">
+                    <h2>Dados da Operadora</h2>
+                    <label for="ans-config-ans">Número ANS</label>
+                    <input type="text" id="ans-config-ans" class="regular-text" placeholder="000000" maxlength="10">
+                    <p class="description">Número que será usado no protocolo.</p>
+                    <div class="ans-config-actions">
+                        <button id="ans-save-settings" class="button button-primary">Salvar</button>
+                    </div>
+                </div>
+                <div class="ans-config-card">
+                    <h2>Sequencial de Protocolos</h2>
+                    <p class="description">Defina o próximo número ou zere o sequencial.</p>
+                    <label for="ans-seq-start">Próximo sequencial (hoje)</label>
+                    <input type="number" id="ans-seq-start" class="small-text" min="1" value="1">
+                    <div class="ans-config-actions">
+                        <button id="ans-set-seq" class="button">Definir</button>
+                        <button id="ans-reset-seq" class="button button-secondary">Zerar tudo</button>
+                    </div>
+                    <div id="ans-seq-info" class="description"></div>
+                </div>
+            </div>
+
+            <hr>
+            <h2>Departamentos</h2>
             <button id="ans-new-departamento" class="button button-primary">Novo Departamento</button>
             
             <div id="ans-departamentos-list"></div>
@@ -190,10 +241,21 @@ class ANS_Tickets_Admin
             #ans-departamento-users { max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
             #ans-departamento-users label { display: block; padding: 5px; }
             .button-delete { background: #dc3232; border-color: #dc3232; color: #fff; }
+            .ans-config-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 16px; margin: 12px 0 24px; }
+            .ans-config-card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; }
+            .ans-config-card h2 { margin-top: 0; }
+            .ans-config-card label { font-weight: 600; display: block; margin-top: 8px; }
+            .ans-config-card input[type="text"], .ans-config-card input[type="number"] { width: 100%; max-width: 240px; }
+            .ans-config-actions { margin-top: 10px; display: flex; gap: 8px; }
+            #ans-seq-info { margin-top: 6px; }
+            .ans-card-highlight { border-color: #7a003c; box-shadow: 0 6px 12px rgba(122,0,60,0.08); }
+            .ans-shortcode-row { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
+            .ans-shortcode-row code { background: #f5f5f5; padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; font-weight: 600; }
         </style>
         <script>
         jQuery(document).ready(function($) {
             loadDepartamentos();
+            loadSettings();
             
             $('#ans-new-departamento').on('click', function() {
                 $('#ans-modal-title').text('Novo Departamento');
@@ -233,6 +295,66 @@ class ANS_Tickets_Admin
                     },
                     error: function(xhr) {
                         alert('Erro: ' + (xhr.responseJSON?.error || 'Erro desconhecido'));
+                    }
+                });
+            });
+
+            function loadSettings(){
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/settings',
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    success: function(res){
+                        $('#ans-config-ans').val(res.ans_registro || '');
+                        $('#ans-seq-info').text('Sequencial de hoje: ' + (res.seq_today || 0));
+                        $('#ans-seq-start').val((res.seq_today||0)+1);
+                    }
+                });
+            }
+
+            $('#ans-save-settings').on('click', function(){
+                const ans = $('#ans-config-ans').val();
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/settings',
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    data: JSON.stringify({ ans_registro: ans }),
+                    contentType: 'application/json',
+                    success: function(){
+                        alert('Configurações salvas.');
+                        loadSettings();
+                    },
+                    error: function(xhr){
+                        alert('Erro: ' + (xhr.responseJSON?.error || 'Erro desconhecido'));
+                    }
+                });
+            });
+
+            $('#ans-set-seq').on('click', function(){
+                const seq = parseInt($('#ans-seq-start').val(),10) || 1;
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/settings',
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    data: JSON.stringify({ seq_start: seq }),
+                    contentType: 'application/json',
+                    success: function(){
+                        alert('Sequencial atualizado.');
+                        loadSettings();
+                    }
+                });
+            });
+
+            $('#ans-reset-seq').on('click', function(){
+                if(!confirm('Zerar todos os sequenciais?')) return;
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/settings',
+                    method: 'POST',
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    data: JSON.stringify({ reset_seq: true }),
+                    contentType: 'application/json',
+                    success: function(){
+                        alert('Sequencial zerado.');
+                        loadSettings();
                     }
                 });
             });
@@ -332,13 +454,22 @@ class ANS_Tickets_Admin
     public static function render_settings_page(): void
     {
         if (isset($_POST['ans_tickets_settings']) && check_admin_referer('ans_tickets_settings', 'ans_tickets_settings_nonce')) {
-            update_option(ANS_TICKETS_OPTION, $_POST['ans_tickets_settings']);
+            $settings = $_POST['ans_tickets_settings'];
+            update_option(ANS_TICKETS_OPTION, $settings);
+
+            // Atualiza o número ANS na tabela operadora para refletir nos protocolos
+            if (!empty($settings['ans_registro'])) {
+                global $wpdb;
+                $operadora_table = ans_tickets_table('operadora');
+                $ans_number = preg_replace('/\D/', '', $settings['ans_registro']);
+                $wpdb->query($wpdb->prepare("UPDATE {$operadora_table} SET ans_registro=%s LIMIT 1", $ans_number));
+            }
+
             echo '<div class="notice notice-success"><p>Configurações salvas com sucesso!</p></div>';
         }
         
         $settings = get_option(ANS_TICKETS_OPTION, []);
-        $sac_page = $settings['sac_page'] ?? '';
-        $dashboard_page = $settings['dashboard_page'] ?? '';
+        $ans_registro = $settings['ans_registro'] ?? '';
         ?>
         <div class="wrap">
             <h1>Configurações - ANS Tickets</h1>
@@ -346,31 +477,10 @@ class ANS_Tickets_Admin
                 <?php wp_nonce_field('ans_tickets_settings', 'ans_tickets_settings_nonce'); ?>
                 <table class="form-table">
                     <tr>
-                        <th><label for="sac_page">Página do SAC</label></th>
+                        <th><label for="ans_registro">Número ANS da Operadora</label></th>
                         <td>
-                            <?php
-                            wp_dropdown_pages([
-                                'name' => 'ans_tickets_settings[sac_page]',
-                                'selected' => $sac_page,
-                                'show_option_none' => 'Selecione uma página',
-                                'option_none_value' => '',
-                            ]);
-                            ?>
-                            <p class="description">Página onde os clientes abrem e acompanham chamados.</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="dashboard_page">Página do Dashboard</label></th>
-                        <td>
-                            <?php
-                            wp_dropdown_pages([
-                                'name' => 'ans_tickets_settings[dashboard_page]',
-                                'selected' => $dashboard_page,
-                                'show_option_none' => 'Selecione uma página',
-                                'option_none_value' => '',
-                            ]);
-                            ?>
-                            <p class="description">Página onde atendentes gerenciam os chamados.</p>
+                            <input type="text" id="ans_registro" name="ans_tickets_settings[ans_registro]" value="<?php echo esc_attr($ans_registro); ?>" class="regular-text" placeholder="000000" maxlength="10">
+                            <p class="description">Número ANS que será usado nos protocolos. Apenas dígitos.</p>
                         </td>
                     </tr>
                 </table>
@@ -381,3 +491,134 @@ class ANS_Tickets_Admin
     }
 }
 
+class ANS_Tickets_List_Table extends WP_List_Table
+{
+    public function __construct()
+    {
+        parent::__construct([
+            'singular' => 'ticket',
+            'plural'   => 'tickets',
+            'ajax'     => false,
+        ]);
+    }
+
+    public function get_columns(): array
+    {
+        return [
+            'cb' => '<input type="checkbox" />',
+            'protocolo' => 'Protocolo',
+            'cliente' => 'Cliente',
+            'status' => 'Status',
+            'prioridade' => 'Prioridade',
+            'departamento' => 'Departamento',
+            'created_at' => 'Criado em',
+            'updated_at' => 'Atualizado em',
+        ];
+    }
+
+    protected function get_sortable_columns(): array
+    {
+        return [
+            'protocolo' => ['protocolo', false],
+            'created_at' => ['created_at', true],
+            'updated_at' => ['updated_at', true],
+        ];
+    }
+
+    protected function column_cb($item)
+    {
+        return sprintf('<input type="checkbox" name="ticket_ids[]" value="%d" />', $item['id']);
+    }
+
+    protected function column_protocolo($item)
+    {
+        $actions = [];
+        $actions['view'] = '<a href="#" onclick="alert(\'Use o dashboard para responder.\');return false;">Ver</a>';
+        $actions['delete'] = sprintf('<a href="%s" onclick="return confirm(\'Excluir este chamado?\');">Excluir</a>', wp_nonce_url(add_query_arg(['page'=>'ans-tickets-list','action'=>'delete','ticket'=>$item['id']]), 'ans_ticket_delete_'.$item['id']));
+        return sprintf('<strong>%s</strong> %s', esc_html($item['protocolo']), $this->row_actions($actions));
+    }
+
+    protected function column_default($item, $column_name)
+    {
+        return esc_html($item[$column_name] ?? '');
+    }
+
+    public function get_bulk_actions(): array
+    {
+        return [
+            'bulk-delete' => 'Excluir',
+        ];
+    }
+
+    public function process_bulk_action()
+    {
+        if ($this->current_action() === 'delete' && !empty($_GET['ticket'])) {
+            $id = (int)$_GET['ticket'];
+            check_admin_referer('ans_ticket_delete_'.$id);
+            $this->delete_tickets([$id]);
+        }
+        if ($this->current_action() === 'bulk-delete' && !empty($_POST['ticket_ids'])) {
+            $ids = array_map('intval', (array)$_POST['ticket_ids']);
+            $this->delete_tickets($ids);
+        }
+    }
+
+    private function delete_tickets(array $ids): void
+    {
+        global $wpdb;
+        if (!current_user_can('manage_options') || empty($ids)) {
+            return;
+        }
+        $table_tickets = ans_tickets_table('tickets');
+        $table_interacoes = ans_tickets_table('interacoes');
+        $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+        $wpdb->query($wpdb->prepare("DELETE FROM {$table_interacoes} WHERE ticket_id IN ($placeholders)", $ids));
+        $wpdb->query($wpdb->prepare("DELETE FROM {$table_tickets} WHERE id IN ($placeholders)", $ids));
+    }
+
+    public function prepare_items()
+    {
+        global $wpdb;
+        $this->process_bulk_action();
+
+        $per_page = 20;
+        $current_page = $this->get_pagenum();
+        $offset = ($current_page - 1) * $per_page;
+
+        $table_tickets = ans_tickets_table('tickets');
+        $table_clientes = ans_tickets_table('clientes');
+        $table_departamentos = ans_tickets_table('departamentos');
+
+        $orderby = !empty($_GET['orderby']) ? sanitize_key($_GET['orderby']) : 'created_at';
+        $order = (isset($_GET['order']) && strtolower($_GET['order']) === 'asc') ? 'ASC' : 'DESC';
+
+        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+        $where = '';
+        if ($search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where = $wpdb->prepare("WHERE t.protocolo LIKE %s OR c.nome_completo LIKE %s OR c.documento LIKE %s", $like, $like, $like);
+        }
+
+        $total = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$table_tickets} t LEFT JOIN {$table_clientes} c ON t.cliente_id=c.id {$where}");
+
+        $sql = $wpdb->prepare(
+            "SELECT t.*, c.nome_completo AS cliente, d.nome AS departamento FROM {$table_tickets} t
+             LEFT JOIN {$table_clientes} c ON t.cliente_id=c.id
+             LEFT JOIN {$table_departamentos} d ON t.departamento_id=d.id
+             {$where}
+             ORDER BY {$orderby} {$order}
+             LIMIT %d OFFSET %d",
+            $per_page,
+            $offset
+        );
+        $rows = $wpdb->get_results($sql, ARRAY_A);
+
+        $this->items = $rows;
+        $this->_column_headers = [$this->get_columns(), [], $this->get_sortable_columns()];
+        $this->set_pagination_args([
+            'total_items' => $total,
+            'per_page' => $per_page,
+            'total_pages' => ceil($total / $per_page),
+        ]);
+    }
+}

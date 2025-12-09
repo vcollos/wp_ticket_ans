@@ -1,24 +1,91 @@
-#ans-dashboard{font-family:system-ui, -apple-system, sans-serif;display:flex;flex-direction:column;gap:12px;color:#0b1b2b}
-.ans-dash-header{display:flex;justify-content:space-between;align-items:center;background:#f6f7fb;border:1px solid #dfe3ea;padding:12px;border-radius:8px}
-.ans-dash-filters{display:flex;gap:8px;align-items:center}
-.ans-dash-filters input,.ans-dash-filters select{padding:6px 8px;border:1px solid #cdd5df;border-radius:6px}
-.ans-dash-filters button{padding:6px 10px;border:none;background:#0b5cd6;color:#fff;border-radius:6px;cursor:pointer}
-.ans-dash-main{display:grid;grid-template-columns:320px 1fr;gap:12px}
-.ans-dash-list{border:1px solid #dfe3ea;border-radius:8px;overflow:hidden;background:#fff}
-#ticket-list{list-style:none;margin:0;padding:0;max-height:70vh;overflow:auto}
-#ticket-list li{border-bottom:1px solid #eef1f6;padding:10px 12px;cursor:pointer}
-#ticket-list li:hover{background:#f6f8ff}
-#ticket-list .proto{font-weight:600}
-#ticket-list .meta{font-size:12px;color:#506070}
-.ans-dash-detail{border:1px solid #dfe3ea;border-radius:8px;padding:12px;background:#fff;min-height:70vh;overflow:auto}
-.ans-dash-detail .placeholder{color:#738199;font-style:italic}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eef1f6;color:#334}
-.timeline{margin:12px 0;padding:0;list-style:none}
-.timeline li{border-left:3px solid #e1e7f0;padding-left:10px;margin-bottom:10px}
-.timeline .who{font-weight:600}
-.form-row{display:flex;gap:8px;margin:8px 0}
-.form-row textarea{width:100%;height:90px;padding:8px;border:1px solid #cdd5df;border-radius:6px}
-.form-row select,.form-row input{padding:6px 8px;border:1px solid #cdd5df;border-radius:6px}
-.btn{padding:8px 12px;border:none;border-radius:6px;cursor:pointer}
-.btn-primary{background:#0b5cd6;color:#fff}
-.btn-secondary{background:#eef1f6;color:#223}
+:root{
+  /* Paleta Collos/Uniodonto */
+  --ans-bg:#f5f5f5;
+  --ans-surface:#ffffff;
+  --ans-border:#dfe3e8;
+  --ans-text:#1c1c1c;
+  --ans-muted:#4a4a4a;
+  --ans-primary:#7a003c;
+  --ans-primary-hover:#a10054;
+  --ans-primary-300:#c63674;
+  --ans-secondary:#0047ff;
+  --ans-secondary-300:#7e96ff;
+  --ans-success:#3ac15b;
+  --ans-warning:#ffb000;
+  --ans-danger:#e84855;
+  --ans-info:#1da1f2;
+  --ans-shadow:0 12px 30px rgba(26,39,68,0.08);
+  --ans-radius:10px;
+  --ans-font:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+}
+
+#ans-dashboard{font-family:var(--ans-font);display:flex;flex-direction:column;gap:14px;color:var(--ans-text);background:var(--ans-bg);padding:12px;border-radius:var(--ans-radius)}
+.ans-dash-header{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(180deg,#ffffff 0%,#f9fbff 100%);border:1px solid var(--ans-border);padding:16px;border-radius:var(--ans-radius);box-shadow:var(--ans-shadow)}
+.ans-dash-header h2{margin:0;font-weight:700}
+.ans-dash-header p{margin:4px 0 0;color:var(--ans-muted)}
+.ans-dash-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ans-dash-filters input,.ans-dash-filters select{padding:10px 12px;border:1px solid var(--ans-border);border-radius:8px;background:#fbfbfd;font-weight:600}
+.ans-dash-filters button{padding:10px 14px;border:none;background:var(--ans-primary);color:#fff;border-radius:8px;cursor:pointer;font-weight:700;box-shadow:0 6px 16px rgba(122,0,60,0.25)}
+.ans-dash-filters button:hover{background:var(--ans-primary-hover)}
+.ans-dash-filters button:active{background:var(--ans-primary-300)}
+.ans-dash-filters button:disabled{background:var(--ans-border);color:var(--ans-muted);box-shadow:none;cursor:not-allowed}
+
+.ans-dash-main{display:grid;grid-template-columns:340px 1fr;gap:14px}
+.ans-dash-list{border:1px solid var(--ans-border);border-radius:var(--ans-radius);overflow:hidden;background:var(--ans-surface);box-shadow:var(--ans-shadow)}
+#ticket-list{list-style:none;margin:0;padding:0;max-height:75vh;overflow:auto}
+#ticket-list li{border-bottom:1px solid #eef1f6;padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:4px;transition:background .15s}
+#ticket-list li:hover{background:#f7f9ff}
+#ticket-list .proto{font-weight:700;color:var(--ans-text)}
+#ticket-list .meta{font-size:12px;color:var(--ans-muted)}
+
+.ans-dash-detail{border:1px solid var(--ans-border);border-radius:var(--ans-radius);padding:16px;background:var(--ans-surface);min-height:75vh;overflow:auto;box-shadow:var(--ans-shadow)}
+.ans-dash-detail .placeholder{color:var(--ans-muted);font-style:italic}
+
+.badge,.ans-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#eef2f8;border:1px solid var(--ans-border);color:var(--ans-text)}
+.ans-status-aberto,.ans-status-novo{background:#e6f2ff;border-color:#b5d7ff;color:#005fcc}
+.ans-status-em_triagem{background:#f4e8ff;border-color:#dcc7ff;color:#6e5dc6}
+.ans-status-aguardando_informacoes_solicitante,.ans-status-pendente_cliente{background:#fff4e5;border-color:#ffd9a6;color:#b56b00}
+.ans-status-em_analise,.ans-status-assistencial{background:#e8f0ff;border-color:#c7d5ff;color:#3449c6}
+.ans-status-em_execucao,.ans-status-atendimento{background:#e9f9ff;border-color:#bbe8ff;color:#0073ea}
+.ans-status-aguardando_terceiros{background:#fef6ff;border-color:#f1d2ff;color:#7a2e8f}
+.ans-status-aguardando_aprovacao{background:#fff9e5;border-color:#ffe6a3;color:#b08500}
+.ans-status-solucao_proposta{background:#f0fff6;border-color:#c8f0d7;color:#13803d}
+.ans-status-resolvido,.ans-status-concluido{background:#e6fff2;border-color:#b7f3d3;color:#0c8a42}
+.ans-status-fechado,.ans-status-arquivado{background:#f0f1f5;border-color:#d6d8de;color:#4a4b57}
+.ans-status-financeiro{background:#f0f5ff;border-color:#c8dafc;color:#2952cc}
+.ans-status-comercial{background:#f0fbff;border-color:#c8edf7;color:#176b7d}
+.ans-status-ouvidoria{background:#fef0f5;border-color:#f7c8d8;color:#a11f4a}
+
+.timeline{margin:12px 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.timeline li{border:1px solid var(--ans-border);border-radius:var(--ans-radius);padding:10px;background:#fbfbfd}
+.timeline .who{font-weight:700;color:var(--ans-text)}
+.timeline .meta{font-size:12px;color:var(--ans-muted)}
+
+.form-row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.form-row textarea{width:100%;height:120px;padding:10px;border:1px solid var(--ans-border);border-radius:8px;background:#fbfbfd}
+.form-row select,.form-row input{padding:10px 12px;border:1px solid var(--ans-border);border-radius:8px;background:#fbfbfd}
+
+.btn{padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:700}
+.btn-primary{background:var(--ans-primary);color:#fff;box-shadow:0 6px 16px rgba(122,0,60,0.25)}
+.btn-primary:hover{background:var(--ans-primary-hover)}
+.btn-primary:active{background:var(--ans-primary-300)}
+.btn-primary:disabled{background:var(--ans-border);color:var(--ans-muted);box-shadow:none;cursor:not-allowed}
+.btn-secondary{background:#eef2f8;color:var(--ans-text)}
+
+/* Detail layout */
+.ans-detail-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.ans-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:12px 0}
+.ans-detail-card{border:1px solid var(--ans-border);border-radius:var(--ans-radius);padding:10px;background:#fbfbfd}
+
+.ans-chip-row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.ans-chip-label{margin-top:8px;font-weight:600;color:var(--ans-muted)}
+.ans-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:24px;font-size:12px;font-weight:700;border:1px solid var(--ans-border);background:#fff;color:var(--ans-text);box-shadow:0 4px 10px rgba(0,0,0,0.04);cursor:default}
+.ans-chip.secondary{background:var(--ans-secondary-100);border-color:var(--ans-secondary-300);color:var(--ans-text)}
+.ans-chip.ghost{background:#f8f8f8;color:var(--ans-muted);border-style:dashed}
+.ans-chip-remove{border:none;background:transparent;color:var(--ans-muted);cursor:pointer;font-size:12px;padding:0 4px}
+.ans-chip-remove:hover{color:var(--ans-text)}
+
+@media(max-width:900px){
+  .ans-dash-main{grid-template-columns:1fr}
+  #ticket-list{max-height:none}
+}

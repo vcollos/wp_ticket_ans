@@ -61,6 +61,22 @@ class ANS_Tickets_Routes
             },
         ]);
 
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/settings', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_get_settings'],
+            'permission_callback' => function () {
+                return current_user_can('manage_options');
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/settings', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_update_settings'],
+            'permission_callback' => function () {
+                return current_user_can('manage_options');
+            },
+        ]);
+
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/departamentos/(?P<id>\\d+)', [
             'methods' => 'GET',
             'callback' => [self::class, 'get_departamento'],
@@ -203,7 +219,7 @@ class ANS_Tickets_Routes
                 'assunto' => $assunto,
                 'descricao' => wp_kses_post($req->get_param('descricao')),
                 'departamento_id' => $departamento_id,
-                'status' => 'novo',
+                'status' => 'aberto',
                 'prioridade' => 'media',
                 'ticket_origem' => $req->get_param('ticket_origem') ? sanitize_text_field($req->get_param('ticket_origem')) : null,
                 'tipo_de_procedimento' => sanitize_text_field($req->get_param('tipo_de_procedimento')),
@@ -374,16 +390,8 @@ class ANS_Tickets_Routes
         if ($inserted === false) {
             return new WP_REST_Response(['error' => 'Erro ao inserir mensagem: ' . $wpdb->last_error], 500);
         }
-        $wpdb->update($table_tickets, ['updated_at' => current_time('mysql'), 'status' => 'assistencial'], ['id' => $ticket_id]);
+        $wpdb->update($table_tickets, ['updated_at' => current_time('mysql'), 'status' => 'em_analise'], ['id' => $ticket_id]);
         return new WP_REST_Response(['status' => 'ok', 'message' => 'Mensagem adicionada com sucesso'], 200);
-    }
-
-    public static function list_departamentos(WP_REST_Request $req)
-    {
-        global $wpdb;
-        $table = ans_tickets_table('departamentos');
-        $rows = $wpdb->get_results("SELECT * FROM {$table} WHERE ativo=1 ORDER BY ordem_fluxo ASC");
-        return $rows;
     }
 
     public static function admin_list_tickets(WP_REST_Request $req)
@@ -451,7 +459,28 @@ class ANS_Tickets_Routes
     {
         global $wpdb;
         $t = ans_tickets_table('tickets');
-        $allowed_status = ['novo','atendimento','financeiro','comercial','assistencial','ouvidoria','concluido','arquivado','pendente_cliente'];
+        $allowed_status = [
+            'aberto',
+            'em_triagem',
+            'aguardando_informacoes_solicitante',
+            'em_analise',
+            'em_execucao',
+            'aguardando_terceiros',
+            'aguardando_aprovacao',
+            'solucao_proposta',
+            'resolvido',
+            'fechado',
+            // Valores legados ainda aceitos para compatibilidade
+            'novo',
+            'atendimento',
+            'financeiro',
+            'comercial',
+            'assistencial',
+            'ouvidoria',
+            'concluido',
+            'arquivado',
+            'pendente_cliente'
+        ];
         $data = [];
         if ($req->get_param('status')) {
             $status = sanitize_text_field($req->get_param('status'));
@@ -575,6 +604,48 @@ class ANS_Tickets_Routes
             'cliente' => $cliente,
             'tickets' => $tickets
         ], 200);
+    }
+
+    public static function admin_get_settings(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $settings = get_option(ANS_TICKETS_OPTION, []);
+        $operadora_table = ans_tickets_table('operadora');
+        $stored_ans = $wpdb->get_var("SELECT ans_registro FROM {$operadora_table} LIMIT 1");
+        $ans_registro = $settings['ans_registro'] ?? $stored_ans;
+        $today = current_time('Ymd');
+        $seq = get_option('ans_tickets_seq_' . $today);
+        return new WP_REST_Response([
+            'ans_registro' => $ans_registro,
+            'seq_today' => $seq ?: 0,
+        ], 200);
+    }
+
+    public static function admin_update_settings(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $settings = get_option(ANS_TICKETS_OPTION, []);
+        $ans_registro = preg_replace('/\D/', '', (string)$req->get_param('ans_registro'));
+        if ($ans_registro) {
+            $settings['ans_registro'] = $ans_registro;
+            update_option(ANS_TICKETS_OPTION, $settings);
+            $operadora_table = ans_tickets_table('operadora');
+            $wpdb->query($wpdb->prepare("UPDATE {$operadora_table} SET ans_registro=%s LIMIT 1", $ans_registro));
+        }
+
+        if ($req->get_param('reset_seq')) {
+            // Remove todas as opções de sequencial
+            $like = 'ans_tickets_seq_%';
+            $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $like));
+        }
+
+        if ($req->get_param('seq_start')) {
+            $seq_start = max(1, (int)$req->get_param('seq_start'));
+            $today = current_time('Ymd');
+            update_option('ans_tickets_seq_' . $today, $seq_start, false);
+        }
+
+        return new WP_REST_Response(['message' => 'Configurações atualizadas'], 200);
     }
 
     public static function list_departamentos_public(WP_REST_Request $req)

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.2.0
+ * Version: 0.4.0
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.2.0');
+define('ANS_TICKETS_VERSION', '0.4.0');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -119,7 +119,6 @@ add_shortcode('ans_ticket_track', function () {
         <form class="track-form">
             <label>Protocolo<input name="protocolo"></label>
             <label>Documento (CPF/CNPJ)<input name="documento"></label>
-            <label>Data de Nascimento<input name="data_nascimento" type="date"></label>
             <button type="submit">Consultar</button>
         </form>
         <div class="ans-ticket-details" style="display:none"></div>
@@ -140,8 +139,61 @@ add_shortcode('ans_ticket_track', function () {
 
 // Shortcode: dashboard de atendimento (fora do wp-admin)
 add_shortcode('ans_ticket_dashboard', function () {
+    $error = '';
+    // Processa login frontal para atendentes
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ans_ticket_login_nonce']) && wp_verify_nonce($_POST['ans_ticket_login_nonce'], 'ans_ticket_agent_login')) {
+        $creds = [
+            'user_login' => sanitize_user($_POST['ans_ticket_user'] ?? ''),
+            'user_password' => $_POST['ans_ticket_pass'] ?? '',
+            'remember' => !empty($_POST['ans_ticket_remember']),
+        ];
+        $user = wp_signon($creds, false);
+        if (is_wp_error($user)) {
+            $error = $user->get_error_message();
+        } elseif (!$user->has_cap('ans_answer_tickets')) {
+            wp_logout();
+            $error = 'Seu usuário não tem permissão para responder chamados.';
+        } else {
+            wp_safe_redirect(get_permalink());
+            exit;
+        }
+    }
+
     if (!is_user_logged_in() || !current_user_can('ans_answer_tickets')) {
-        return '<div class="ans-ticket-card">Acesso restrito aos atendentes.</div>';
+        ob_start();
+        ?>
+        <div class="ans-ticket-card">
+            <style>
+                .ans-agent-login{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 16px;margin-top:12px}
+                .ans-agent-login label{display:flex;flex-direction:column;gap:6px;font-weight:600;color:#1c1c1c}
+                .ans-agent-login input{padding:12px 14px;border:1px solid #dfe3e8;border-radius:10px;font-size:14px;background:#fbfbfd}
+                .ans-agent-login .ans-check{flex-direction:row;align-items:center;font-weight:500}
+                .ans-agent-login .ans-check input{width:auto;margin-right:8px;padding:0}
+                .ans-agent-login button{background:#7a003c;color:#fff;border:none;padding:12px 18px;border-radius:10px;font-weight:700;cursor:pointer;width:fit-content}
+                .ans-agent-login button:hover{background:#a10054}
+                .ans-alert.error{padding:10px;border:1px solid #e8c4c4;background:#fff0f0;color:#a10000;border-radius:8px;margin-bottom:10px}
+            </style>
+            <h3>Área de Atendentes</h3>
+            <p>Use seu usuário e senha do WordPress para acessar o painel de chamados.</p>
+            <?php if ($error): ?>
+                <div class="ans-alert error"><?php echo wp_kses_post($error); ?></div>
+            <?php endif; ?>
+            <form method="post" class="ans-agent-login">
+                <?php wp_nonce_field('ans_ticket_agent_login', 'ans_ticket_login_nonce'); ?>
+                <label>Usuário ou E-mail
+                    <input type="text" name="ans_ticket_user" required autocomplete="username">
+                </label>
+                <label>Senha
+                    <input type="password" name="ans_ticket_pass" required autocomplete="current-password">
+                </label>
+                <label class="ans-check">
+                    <input type="checkbox" name="ans_ticket_remember" value="1"> Manter conectado
+                </label>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+        <?php
+        return ob_get_clean();
     }
     wp_enqueue_style('ans-tickets-admin', ANS_TICKETS_URL . 'assets/admin.css', [], ANS_TICKETS_VERSION);
     wp_enqueue_script('ans-tickets-admin', ANS_TICKETS_URL . 'assets/admin.js', [], ANS_TICKETS_VERSION, true);
@@ -161,15 +213,16 @@ add_shortcode('ans_ticket_dashboard', function () {
             <div class="ans-dash-filters">
                 <select id="filter-status">
                     <option value="">Status</option>
-                    <option value="novo">Novo</option>
-                    <option value="atendimento">Atendimento</option>
-                    <option value="financeiro">Financeiro</option>
-                    <option value="comercial">Comercial</option>
-                    <option value="assistencial">Assistencial</option>
-                    <option value="ouvidoria">Ouvidoria</option>
-                    <option value="pendente_cliente">Pendente Cliente</option>
-                    <option value="concluido">Concluído</option>
-                    <option value="arquivado">Arquivado</option>
+                    <option value="aberto">Aberto</option>
+                    <option value="em_triagem">Em Triagem</option>
+                    <option value="aguardando_informacoes_solicitante">Aguardando Informações do Solicitante</option>
+                    <option value="em_analise">Em Análise</option>
+                    <option value="em_execucao">Em Atendimento / Execução</option>
+                    <option value="aguardando_terceiros">Aguardando Terceiros</option>
+                    <option value="aguardando_aprovacao">Aguardando Aprovação</option>
+                    <option value="solucao_proposta">Solução Proposta</option>
+                    <option value="resolvido">Resolvido</option>
+                    <option value="fechado">Fechado</option>
                 </select>
                 <input type="text" id="filter-protocolo" placeholder="Protocolo">
                 <input type="text" id="filter-documento" placeholder="Documento">
