@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.4.0
+ * Version: 0.4.3
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.4.0');
+define('ANS_TICKETS_VERSION', '0.4.3');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -74,23 +74,24 @@ add_shortcode('ans_ticket_form', function () {
                         <option value="">Selecione um assunto</option>
                     </select>
                 </label>
+                <label class="full field-ouvidoria" style="display:none">Protocolo anterior
+                    <input name="ticket_origem" id="ans-ticket-origem">
+                </label>
                 <label class="full">Descrição
                     <textarea name="descricao" required></textarea>
                 </label>
+                <div id="ans-ouvidoria-notice" class="ans-ouvidoria-notice" style="display:none"></div>
                 <div class="assist-block" style="display:none">
-                    <label>Protocolo anterior (Ouvidoria)
-                        <input name="ticket_origem">
-                    </label>
-                    <label>Tipo de procedimento (Assistencial)
+                    <label class="field-assistencial">Tipo de procedimento
                         <input name="tipo_de_procedimento">
                     </label>
-                    <label>Prestador / Clínica
+                    <label class="field-assistencial">Prestador / Clínica
                         <input name="prestador">
                     </label>
-                    <label>Data do evento
+                    <label class="field-assistencial">Data do evento
                         <input name="data_evento" type="date">
                     </label>
-                    <label>Número de guia / orçamento
+                    <label class="field-assistencial">Número de guia / orçamento
                         <input name="numero_guia">
                     </label>
                 </div>

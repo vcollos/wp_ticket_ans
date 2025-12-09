@@ -86,9 +86,40 @@
   function toggleAssistFields(){
     const select = document.getElementById('ans-assunto');
     const block = document.querySelector('#ans-ticket-form .assist-block');
+    const ouvidoriaField = document.querySelector('#ans-ticket-form .field-ouvidoria');
+    const ouvidoriaInput = document.getElementById('ans-ticket-origem');
+    const notice = document.getElementById('ans-ouvidoria-notice');
     if (!select || !block) return;
-    const show = select.value === 'assistencial';
-    block.style.display = show ? 'grid' : 'none';
+    const isOuvidoria = select.value === 'ouvidoria';
+    const isAssist = select.value === 'assistencial';
+    const assistFields = block.querySelectorAll('.field-assistencial');
+
+    if (ouvidoriaField) {
+      ouvidoriaField.style.display = isOuvidoria ? '' : 'none';
+      if (ouvidoriaInput) {
+        ouvidoriaInput.required = isOuvidoria;
+      }
+    }
+
+    assistFields.forEach(el=>{ el.style.display = isAssist ? '' : 'none'; });
+    block.style.display = (isAssist) ? 'grid' : 'none';
+
+    let noticeBox = notice;
+    if (!noticeBox) {
+      noticeBox = document.createElement('div');
+      noticeBox.id = 'ans-ouvidoria-notice';
+      noticeBox.className = 'ans-ouvidoria-notice';
+      const desc = document.querySelector('#ans-ticket-form textarea[name=\"descricao\"]');
+      if (desc && desc.parentNode) {
+        desc.parentNode.insertAdjacentElement('afterend', noticeBox);
+      }
+    }
+    if (isOuvidoria) {
+      noticeBox.innerHTML = '<p><strong>Sobre a Ouvidoria</strong></p><p>A Ouvidoria tem como objetivo intervir em favor dos clientes que já recorreram à Central de Atendimento, Serviço de Apoio ao Cliente (SAC) ou contato por e-mail e não se sentiram satisfeitos ou desejam rever a solução dada por estes canais.</p><p>Outro método de contato é o Telefone: (53) 3232–1563</p><p>A Ouvidoria Uniodonto Rio Grande Litoral possui o prazo de resolução de até 7 (sete) dias úteis. Em casos excepcionais ou de maior complexidade em que não seja possível a resolução em até 7 (sete) dias úteis, o prazo poderá ser ajustado com o beneficiário para um período não superior a 30 (trinta) dias úteis, como prevê a Resolução Normativa nº 323/2013.</p>';
+      noticeBox.style.display = 'block';
+    } else {
+      noticeBox.style.display = 'none';
+    }
   }
 
   async function fetchTicket(protocol, token){

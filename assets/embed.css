@@ -1,23 +1,23 @@
 :root{
-  /* Paleta Collos/Uniodonto (Monday-like) */
+  /* Paleta Uniodonto */
   --ans-bg:#f5f5f5;
   --ans-surface:#ffffff;
   --ans-border:#dfe3e8;
   --ans-text:#1c1c1c;
   --ans-text-muted:#4a4a4a;
-  --ans-primary:#7a003c;
-  --ans-primary-hover:#a10054;
-  --ans-primary-300:#c63674;
-  --ans-primary-200:#eca7c6;
-  --ans-primary-100:#f7ddeb;
-  --ans-secondary:#0047ff;
-  --ans-secondary-300:#7e96ff;
-  --ans-secondary-100:#eef1ff;
-  --ans-success:#3ac15b;
-  --ans-warning:#ffb000;
-  --ans-danger:#e84855;
-  --ans-info:#1da1f2;
-  --ans-shadow:0 12px 30px rgba(26,39,68,0.06);
+  --ans-primary:#a60069; /* Vinho Uniodonto */
+  --ans-primary-hover:#810e56; /* Vinho escuro */
+  --ans-primary-300:#bf9cff; /* Roxo */
+  --ans-primary-200:#ff9fad; /* Pêssego */
+  --ans-primary-100:#ffe3ee; /* claro derivado */
+  --ans-secondary:#60ebff; /* Ciano */
+  --ans-secondary-300:#e1ff7b; /* Lima */
+  --ans-secondary-100:#e6fbff; /* claro ciano */
+  --ans-success:#e1ff7b; /* Lima como sucesso */
+  --ans-warning:#ff9fad; /* Pêssego como aviso */
+  --ans-danger:#ff637e; /* Goiaba como perigo */
+  --ans-info:#60ebff; /* Ciano */
+  --ans-shadow:0 12px 30px rgba(129,14,86,0.08);
   --ans-radius:10px;
   --ans-font:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
 }
@@ -104,6 +104,7 @@
 .ans-status-financeiro{background:#f0f5ff;border-color:#c8dafc;color:#2952cc}
 .ans-status-comercial{background:#f0fbff;border-color:#c8edf7;color:#176b7d}
 .ans-status-ouvidoria{background:#fef0f5;border-color:#f7c8d8;color:#a11f4a}
+.ans-ouvidoria-notice{margin-bottom:12px;padding:12px 14px;border:1px solid var(--ans-border);border-radius:10px;background:#fff7fb;color:var(--ans-text);box-shadow:0 4px 12px rgba(0,0,0,0.04);line-height:1.5}
 
 @media(max-width:768px){
   #ans-ticket-track form{flex-direction:column;align-items:flex-start}

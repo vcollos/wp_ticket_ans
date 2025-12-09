@@ -1,20 +1,20 @@
 :root{
-  /* Paleta Collos/Uniodonto */
+  /* Paleta Uniodonto */
   --ans-bg:#f5f5f5;
   --ans-surface:#ffffff;
   --ans-border:#dfe3e8;
   --ans-text:#1c1c1c;
   --ans-muted:#4a4a4a;
-  --ans-primary:#7a003c;
-  --ans-primary-hover:#a10054;
-  --ans-primary-300:#c63674;
-  --ans-secondary:#0047ff;
-  --ans-secondary-300:#7e96ff;
-  --ans-success:#3ac15b;
-  --ans-warning:#ffb000;
-  --ans-danger:#e84855;
-  --ans-info:#1da1f2;
-  --ans-shadow:0 12px 30px rgba(26,39,68,0.08);
+  --ans-primary:#a60069; /* Vinho */
+  --ans-primary-hover:#810e56; /* Vinho escuro */
+  --ans-primary-300:#bf9cff; /* Roxo */
+  --ans-secondary:#60ebff; /* Ciano */
+  --ans-secondary-300:#e1ff7b; /* Lima */
+  --ans-success:#e1ff7b; /* Lima */
+  --ans-warning:#ff9fad; /* Pêssego */
+  --ans-danger:#ff637e; /* Goiaba */
+  --ans-info:#60ebff; /* Ciano */
+  --ans-shadow:0 12px 30px rgba(129,14,86,0.08);
   --ans-radius:10px;
   --ans-font:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
 }
