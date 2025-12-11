@@ -43,12 +43,31 @@ class ANS_Tickets_Admin
 
         add_submenu_page(
             'ans-tickets',
-            'Relatórios v2',
-            'Relatórios v2',
+            'Departamentos (lista)',
+            'Departamentos (lista)',
             'manage_options',
-            'ans-reports-v2',
-            [self::class, 'render_reports_v2']
+            'ans-tickets-departamentos',
+            [self::class, 'render_departamentos_table']
         );
+
+        add_submenu_page(
+            'ans-tickets',
+            'Assuntos',
+            'Assuntos',
+            'manage_options',
+            'ans-tickets-assuntos',
+            [self::class, 'render_assuntos_table']
+        );
+
+        add_submenu_page(
+            'ans-tickets',
+            'Status Custom',
+            'Status Custom',
+            'manage_options',
+            'ans-tickets-status',
+            [self::class, 'render_status_table']
+        );
+
     }
 
     public static function enqueue_admin_assets(string $hook): void
@@ -123,41 +142,57 @@ class ANS_Tickets_Admin
         ?>
         <div class="wrap">
             <h1>Configurações Gerais</h1>
-            <div class="ans-config-grid">
-                <div class="ans-config-card ans-card-highlight">
-                    <h2>Shortcodes</h2>
-                    <p class="description">Use estes shortcodes para exibir os formulários no site.</p>
-                    <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><span>Formulário de abertura</span></div>
-                    <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><span>Acompanhar / Recuperar chamados</span></div>
-                    <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><span>Dashboard de atendentes (requer login/permissão)</span></div>
-                </div>
-                <div class="ans-config-card">
-                    <h2>Dados da Operadora</h2>
-                    <label for="ans-config-ans">Número ANS</label>
-                    <input type="text" id="ans-config-ans" class="regular-text" placeholder="000000" maxlength="10">
-                    <p class="description">Número que será usado no protocolo.</p>
-                    <div class="ans-config-actions">
-                        <button id="ans-save-settings" class="button button-primary">Salvar</button>
+
+            <div class="ans-tabs">
+                <button class="ans-tab-btn active" data-tab="geral">Geral</button>
+                <button class="ans-tab-btn" data-tab="departamentos">Departamentos & Equipe</button>
+                <button class="ans-tab-btn" data-tab="assuntos">Assuntos</button>
+                <button class="ans-tab-btn" data-tab="status">Status Custom</button>
+                <button class="ans-tab-btn" data-tab="avancado">Avançado</button>
+            </div>
+
+            <div class="ans-tab-section" data-tab="geral">
+                <div class="ans-settings-grid">
+                    <div class="ans-config-card ans-card-highlight">
+                        <h2>Shortcodes</h2>
+                        <p class="description">Use estes shortcodes para exibir os formulários no site.</p>
+                        <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_form]">Copiar</button></div>
+                        <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_track]">Copiar</button></div>
+                        <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_dashboard]">Copiar</button></div>
                     </div>
-                </div>
-                <div class="ans-config-card">
-                    <h2>Sequencial de Protocolos</h2>
-                    <p class="description">Defina o próximo número ou zere o sequencial.</p>
-                    <label for="ans-seq-start">Próximo sequencial (hoje)</label>
-                    <input type="number" id="ans-seq-start" class="small-text" min="1" value="1">
-                    <div class="ans-config-actions">
-                        <button id="ans-set-seq" class="button">Definir</button>
-                        <button id="ans-reset-seq" class="button button-secondary">Zerar tudo</button>
+                    <div class="ans-config-card">
+                        <h2>Dados da Operadora</h2>
+                        <label for="ans-config-ans">Número ANS</label>
+                        <input type="text" id="ans-config-ans" class="regular-text" placeholder="000000" maxlength="10">
+                        <p class="description">Número que será usado no protocolo.</p>
+                        <div class="ans-config-actions">
+                            <button id="ans-save-settings" class="button button-primary">Salvar</button>
+                        </div>
                     </div>
-                    <div id="ans-seq-info" class="description"></div>
+                    <div class="ans-config-card">
+                        <h2>Sequencial de Protocolos</h2>
+                        <p class="description">Defina o próximo número ou zere o sequencial.</p>
+                        <label for="ans-seq-start">Próximo sequencial (hoje)</label>
+                        <input type="number" id="ans-seq-start" class="small-text" min="1" value="1">
+                        <div class="ans-config-actions">
+                            <button id="ans-set-seq" class="button">Definir</button>
+                            <button id="ans-reset-seq" class="button button-secondary">Zerar tudo</button>
+                        </div>
+                        <div id="ans-seq-info" class="description"></div>
+                    </div>
                 </div>
             </div>
 
-            <hr>
-            <h2>Departamentos</h2>
-            <button id="ans-new-departamento" class="button button-primary">Novo Departamento</button>
-            
-            <div id="ans-departamentos-list"></div>
+            <div class="ans-tab-section" data-tab="departamentos" style="display:none;">
+                <div class="ans-panel-head">
+                    <div>
+                        <h2>Departamentos</h2>
+                        <p class="description">Organize fluxos (SLA, cor, usuários, assuntos) por departamento.</p>
+                    </div>
+                    <button id="ans-new-departamento" class="button button-primary">Novo Departamento</button>
+                </div>
+                <div id="ans-departamentos-list"></div>
+            </div>
 
             <!-- Modal para criar/editar departamento -->
             <div id="ans-departamento-modal" style="display:none;">
@@ -267,16 +302,88 @@ class ANS_Tickets_Admin
                     <ul id="ans-status-list"></ul>
                 </div>
             </div>
+
+            <div class="ans-tab-section" data-tab="assuntos" style="display:none;">
+                <div class="ans-card-light">
+                    <div class="ans-panel-head">
+                        <div>
+                            <h3>Assuntos por Departamento</h3>
+                            <p class="description">Selecione um departamento e gerencie assuntos.</p>
+                        </div>
+                    </div>
+                    <div class="ans-inline-row">
+                        <label>Departamento</label>
+                        <select id="ans-assunto-dep"></select>
+                    </div>
+                    <div class="ans-inline-row gap-sm">
+                        <input type="text" id="ans-assunto-nome" class="regular-text" placeholder="Novo assunto">
+                        <input type="text" id="ans-assunto-slug" class="regular-text" placeholder="slug-opcional">
+                        <button id="ans-assunto-save" class="button button-primary">Salvar</button>
+                    </div>
+                    <ul id="ans-assunto-list" class="ans-small-list"></ul>
+                </div>
+            </div>
+
+            <div class="ans-tab-section" data-tab="status" style="display:none;">
+                <div class="ans-card-light">
+                    <div class="ans-panel-head">
+                        <div>
+                            <h3>Status custom por departamento</h3>
+                            <p class="description">Defina funis diferentes por departamento.</p>
+                        </div>
+                    </div>
+                    <div class="ans-inline-row">
+                        <label>Departamento</label>
+                        <select id="ans-status-dep"></select>
+                    </div>
+                    <div class="ans-inline-row gap-sm">
+                        <input type="text" id="ans-status-nome" class="regular-text" placeholder="Nome">
+                        <input type="text" id="ans-status-slug" class="regular-text" placeholder="slug">
+                        <input type="color" id="ans-status-cor" value="#a60069">
+                        <input type="number" id="ans-status-ordem" class="small-text" placeholder="Ordem">
+                    </div>
+                    <div class="ans-inline-row gap-sm">
+                        <label><input type="checkbox" id="ans-status-inicial"> Inicial</label>
+                        <label><input type="checkbox" id="ans-status-final-ok"> Final Resolvido</label>
+                        <label><input type="checkbox" id="ans-status-final-nok"> Final Não Resolvido</label>
+                        <button id="ans-status-save" class="button button-primary">Salvar</button>
+                    </div>
+                    <ul id="ans-status-list" class="ans-small-list"></ul>
+                </div>
+            </div>
+
+            <div class="ans-tab-section" data-tab="avancado" style="display:none;">
+                <div class="ans-card-light">
+                    <h3>Avançado</h3>
+                    <p class="description">Espaço reservado para logs, resets, migrações e integrações futuras.</p>
+                </div>
+            </div>
         </div>
         <style>
+            .ans-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:12px 0 24px}
+            .ans-panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 14px;box-shadow:0 6px 14px rgba(0,0,0,0.04)}
+            .ans-panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+            .ans-grid-lower{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px}
+            .ans-card-light{background:#fff;border:1px solid #e4e4e4;border-radius:8px;padding:12px;box-shadow:0 6px 12px rgba(0,0,0,0.03);display:flex;flex-direction:column;gap:10px}
+            .ans-inline-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+            .ans-inline-row.gap-sm{gap:8px}
+            .ans-small-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+            .ans-small-list li{background:#f9f9fb;border:1px solid #e4e4e4;border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600}
+            .ans-tabs{display:flex;gap:8px;margin:12px 0}
+            .ans-tab-btn{border:1px solid #ddd;background:#f7f7f9;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:700}
+            .ans-tab-btn.active{background:#7a003c;color:#fff;border-color:#7a003c}
+            .ans-tab-section{margin-top:8px}
             .ans-admin-dashboard { margin-top: 20px; }
             .ans-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
             .ans-stat-card { background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; }
             .ans-stat-number { font-size: 32px; font-weight: bold; color: #0073aa; margin: 10px 0; }
-            #ans-departamentos-list { margin-top: 20px; }
-            .ans-departamento-item { background: #fff; padding: 15px; margin-bottom: 10px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
-            .ans-departamento-info h3 { margin: 0 0 5px 0; }
-            .ans-departamento-actions { display: flex; gap: 10px; }
+            #ans-departamentos-list { margin-top: 12px; display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); }
+            .ans-departamento-item { background: #fff; padding: 12px; border: 1px solid #ddd; border-radius:10px; display: grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; box-shadow:0 4px 10px rgba(0,0,0,0.03); }
+            .ans-departamento-badge{width:12px;height:12px;border-radius:50%;}
+            .ans-departamento-info h3 { margin: 0; font-size:15px; }
+            .ans-departamento-info p { margin:2px 0 0;font-size:12px;color:#4a4a4a }
+            .ans-departamento-actions { display: flex; gap: 6px; }
+            .ans-sla-pill{background:#f0f0ff;border-radius:12px;padding:2px 8px;font-weight:700}
             #ans-departamento-modal, #ans-delete-departamento-modal { position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
             .ans-modal-content { background: #fff; margin: 5% auto; padding: 20px; width: 80%; max-width: 600px; position: relative; }
             .ans-modal-close { position: absolute; right: 20px; top: 20px; font-size: 28px; cursor: pointer; }
@@ -403,6 +510,21 @@ class ANS_Tickets_Admin
                 });
             });
 
+            $('.ans-tab-btn').on('click', function(){
+                const tab = $(this).data('tab');
+                $('.ans-tab-btn').removeClass('active');
+                $(this).addClass('active');
+                $('.ans-tab-section').hide();
+                $('.ans-tab-section[data-tab="'+tab+'"]').show();
+            });
+
+            $(document).on('click','.ans-copy', function(){
+                const code = $(this).data('code');
+                navigator.clipboard.writeText(code);
+                $(this).text('Copiado!').prop('disabled', true);
+                setTimeout(()=>{ $(this).text('Copiar').prop('disabled', false); }, 1200);
+            });
+
             function loadDepartamentos() {
                 $.ajax({
                     url: ANS_TICKETS_ADMIN.api + '/admin/departamentos',
@@ -411,9 +533,10 @@ class ANS_Tickets_Admin
                         let html = '';
                         departamentos.forEach(function(dept) {
                             html += '<div class="ans-departamento-item">';
+                            html += '<div class="ans-departamento-badge" style="background:'+(dept.cor||\'#7a003c\')+'"></div>';
                             html += '<div class="ans-departamento-info">';
-                            html += '<h3>' + dept.nome + ' (' + dept.slug + ')</h3>';
-                            html += '<p>Ordem: ' + dept.ordem_fluxo + ' | SLA: ' + (dept.sla_hours || 'N/A') + 'h | Ativo: ' + (dept.ativo ? 'Sim' : 'Não') + '</p>';
+                            html += '<h3>' + dept.nome + ' <small>(' + dept.slug + ')</small></h3>';
+                            html += '<p>Ordem: ' + dept.ordem_fluxo + ' | SLA: <span class="ans-sla-pill">'+ (dept.sla_hours || 'N/A') +'h</span> | Ativo: ' + (dept.ativo ? 'Sim' : 'Não') + '</p>';
                             html += '</div>';
                             html += '<div class="ans-departamento-actions">';
                             html += '<button class="button ans-edit-dept" data-id="' + dept.id + '">Editar</button>';
@@ -693,6 +816,242 @@ class ANS_Tickets_Admin
         </div>
         <?php
     }
+
+    public static function render_departamentos_table(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado');
+        }
+        require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+
+            $message = '';
+            if (!empty($_POST['ans_dep_nonce']) && wp_verify_nonce($_POST['ans_dep_nonce'], 'ans_dep_save')) {
+                $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+                $nome = sanitize_text_field($_POST['nome'] ?? '');
+                $slug = $_POST['slug'] !== '' ? sanitize_title($_POST['slug']) : sanitize_title($nome);
+                $data = [
+                    'nome' => $nome,
+                    'slug' => $slug,
+                    'ordem_fluxo' => (int)($_POST['ordem_fluxo'] ?? 1),
+                    'cor' => sanitize_text_field($_POST['cor'] ?? '#7a003c'),
+                'sla_hours' => $_POST['sla_hours'] !== '' ? (int)$_POST['sla_hours'] : null,
+                'ativo' => !empty($_POST['ativo']) ? 1 : 0,
+            ];
+            if ($id) {
+                $wpdb->update($table, $data, ['id' => $id]);
+                $message = 'Departamento atualizado.';
+            } else {
+                $wpdb->insert($table, $data);
+                $message = 'Departamento criado.';
+            }
+        }
+        if (!empty($_GET['action']) && $_GET['action'] === 'toggle' && !empty($_GET['id']) && check_admin_referer('ans_dep_toggle_' . (int)$_GET['id'])) {
+            $id = (int)$_GET['id'];
+            $ativo = (int)$wpdb->get_var($wpdb->prepare("SELECT ativo FROM {$table} WHERE id=%d", $id));
+            $wpdb->update($table, ['ativo' => $ativo ? 0 : 1], ['id' => $id]);
+            $message = $ativo ? 'Departamento desativado.' : 'Departamento ativado.';
+        }
+
+        $list = new ANS_Departamento_List_Table();
+        $list->prepare_items();
+        $editing = null;
+        if (!empty($_GET['action']) && $_GET['action'] === 'edit' && !empty($_GET['id'])) {
+            $editing = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int)$_GET['id']), ARRAY_A);
+        }
+        ?>
+        <div class="wrap">
+            <h1>Departamentos</h1>
+            <?php if ($message): ?><div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div><?php endif; ?>
+            <form method="post" class="ans-inline-form">
+                <?php wp_nonce_field('ans_dep_save', 'ans_dep_nonce'); ?>
+                <input type="hidden" name="id" value="<?php echo esc_attr($editing['id'] ?? 0); ?>">
+                <input type="text" name="nome" placeholder="Nome" value="<?php echo esc_attr($editing['nome'] ?? ''); ?>" required>
+                <input type="text" name="slug" placeholder="slug" value="<?php echo esc_attr($editing['slug'] ?? ''); ?>" required>
+                <input type="number" name="ordem_fluxo" placeholder="Ordem" value="<?php echo esc_attr($editing['ordem_fluxo'] ?? 1); ?>" min="1">
+                <input type="color" name="cor" value="<?php echo esc_attr($editing['cor'] ?? '#7a003c'); ?>">
+                <input type="number" name="sla_hours" placeholder="SLA (h)" value="<?php echo esc_attr($editing['sla_hours'] ?? ''); ?>">
+                <label><input type="checkbox" name="ativo" value="1" <?php checked($editing['ativo'] ?? 1); ?>> Ativo</label>
+                <?php submit_button($editing ? 'Atualizar' : 'Adicionar', 'primary', 'submit', false); ?>
+                <?php if ($editing): ?>
+                    <a href="<?php echo admin_url('admin.php?page=ans-tickets-departamentos'); ?>" class="button">Cancelar</a>
+                <?php endif; ?>
+            </form>
+            <form method="get">
+                <input type="hidden" name="page" value="ans-tickets-departamentos">
+                <?php $list->search_box('Buscar', 'ans_dep_search'); ?>
+                <?php $list->display(); ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    public static function render_assuntos_table(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado');
+        }
+        require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+        global $wpdb;
+        $table = ans_tickets_table('assuntos');
+        $depsTable = ans_tickets_table('departamentos');
+
+        $message = '';
+        if (!empty($_POST['ans_assunto_nonce']) && wp_verify_nonce($_POST['ans_assunto_nonce'], 'ans_assunto_save')) {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            $dep = (int)($_POST['departamento_id'] ?? 0);
+            $nome = sanitize_text_field($_POST['nome'] ?? '');
+            $slug = $_POST['slug'] !== '' ? sanitize_title($_POST['slug']) : sanitize_title($nome);
+            $data = [
+                'departamento_id' => $dep,
+                'nome' => $nome,
+                'slug' => $slug,
+                'ativo' => !empty($_POST['ativo']) ? 1 : 0,
+            ];
+            if ($id) {
+                $wpdb->update($table, $data, ['id' => $id]);
+                $message = 'Assunto atualizado.';
+            } else {
+                $wpdb->insert($table, $data);
+                $message = 'Assunto criado.';
+            }
+        }
+        if (!empty($_GET['action']) && $_GET['action'] === 'delete' && !empty($_GET['id']) && check_admin_referer('ans_assunto_delete_' . (int)$_GET['id'])) {
+            $wpdb->delete($table, ['id' => (int)$_GET['id']]);
+            $message = 'Assunto excluído.';
+        }
+
+        $list = new ANS_Assunto_List_Table();
+        $list->prepare_items();
+        $editing = null;
+        if (!empty($_GET['action']) && $_GET['action'] === 'edit' && !empty($_GET['id'])) {
+            $editing = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int)$_GET['id']), ARRAY_A);
+        }
+        $deps = $wpdb->get_results("SELECT id,nome FROM {$depsTable} ORDER BY nome ASC");
+        ?>
+        <div class="wrap">
+            <h1>Assuntos</h1>
+            <?php if ($message): ?><div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div><?php endif; ?>
+            <form method="post" class="ans-inline-form">
+                <?php wp_nonce_field('ans_assunto_save', 'ans_assunto_nonce'); ?>
+                <input type="hidden" name="id" value="<?php echo esc_attr($editing['id'] ?? 0); ?>">
+                <select name="departamento_id" required>
+                    <option value="">Departamento</option>
+                    <?php foreach ($deps as $d): ?>
+                        <option value="<?php echo esc_attr($d->id); ?>" <?php selected(isset($editing['departamento_id']) && (int)$editing['departamento_id'] === (int)$d->id); ?>><?php echo esc_html($d->nome); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="text" name="nome" placeholder="Nome" value="<?php echo esc_attr($editing['nome'] ?? ''); ?>" required>
+                <input type="text" name="slug" placeholder="slug" value="<?php echo esc_attr($editing['slug'] ?? ''); ?>">
+                <label><input type="checkbox" name="ativo" value="1" <?php checked($editing['ativo'] ?? 1); ?>> Ativo</label>
+                <?php submit_button($editing ? 'Atualizar' : 'Adicionar', 'primary', 'submit', false); ?>
+                <?php if ($editing): ?>
+                    <a href="<?php echo admin_url('admin.php?page=ans-tickets-assuntos'); ?>" class="button">Cancelar</a>
+                <?php endif; ?>
+            </form>
+            <form method="get">
+                <input type="hidden" name="page" value="ans-tickets-assuntos">
+                <?php $list->search_box('Buscar', 'ans_assunto_search'); ?>
+                <?php $list->display(); ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    public static function render_status_table(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado');
+        }
+        require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+        global $wpdb;
+        $table = ans_tickets_table('status_custom');
+        $depsTable = ans_tickets_table('departamentos');
+
+        $message = '';
+        self::seed_default_statuses();
+        if (!empty($_POST['ans_status_nonce']) && wp_verify_nonce($_POST['ans_status_nonce'], 'ans_status_save')) {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            $dep = $_POST['departamento_id'] !== '' ? (int)$_POST['departamento_id'] : null;
+            $nome = sanitize_text_field($_POST['nome'] ?? '');
+            $slug = $_POST['slug'] !== '' ? sanitize_title($_POST['slug']) : sanitize_title($nome);
+            $data = [
+                'departamento_id' => $dep,
+                'nome' => $nome,
+                'slug' => $slug,
+                'cor' => sanitize_text_field($_POST['cor'] ?? '#7a003c'),
+                'ordem' => (int)($_POST['ordem'] ?? 0),
+                'ativo' => !empty($_POST['ativo']) ? 1 : 0,
+                'inicial' => !empty($_POST['inicial']) ? 1 : 0,
+                'final_resolvido' => !empty($_POST['final_resolvido']) ? 1 : 0,
+                'final_nao_resolvido' => !empty($_POST['final_nao_resolvido']) ? 1 : 0,
+            ];
+            if ($id) {
+                $wpdb->update($table, $data, ['id' => $id]);
+                $message = 'Status atualizado.';
+            } else {
+                $wpdb->insert($table, $data);
+                $id = $wpdb->insert_id;
+                $message = 'Status criado.';
+            }
+            // enforce uniqueness of flags per departamento (or global)
+            $depWhere = $dep ? $wpdb->prepare("= %d", $dep) : "IS NULL";
+            if (!empty($_POST['inicial'])) {
+                $wpdb->query($wpdb->prepare("UPDATE {$table} SET inicial=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+            }
+            if (!empty($_POST['final_resolvido'])) {
+                $wpdb->query($wpdb->prepare("UPDATE {$table} SET final_resolvido=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+            }
+            if (!empty($_POST['final_nao_resolvido'])) {
+                $wpdb->query($wpdb->prepare("UPDATE {$table} SET final_nao_resolvido=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+            }
+        }
+        if (!empty($_GET['action']) && $_GET['action'] === 'delete' && !empty($_GET['id']) && check_admin_referer('ans_status_delete_' . (int)$_GET['id'])) {
+            $wpdb->delete($table, ['id' => (int)$_GET['id']]);
+            $message = 'Status excluído.';
+        }
+
+        $list = new ANS_Status_List_Table();
+        $list->prepare_items();
+        $editing = null;
+        if (!empty($_GET['action']) && $_GET['action'] === 'edit' && !empty($_GET['id'])) {
+            $editing = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int)$_GET['id']), ARRAY_A);
+        }
+        $deps = $wpdb->get_results("SELECT id,nome FROM {$depsTable} ORDER BY nome ASC");
+        ?>
+        <div class="wrap">
+            <h1>Status Custom</h1>
+            <?php if ($message): ?><div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div><?php endif; ?>
+            <form method="post" class="ans-inline-form">
+                <?php wp_nonce_field('ans_status_save', 'ans_status_nonce'); ?>
+                <input type="hidden" name="id" value="<?php echo esc_attr($editing['id'] ?? 0); ?>">
+                <select name="departamento_id">
+                    <option value="">Global</option>
+                    <?php foreach ($deps as $d): ?>
+                        <option value="<?php echo esc_attr($d->id); ?>" <?php selected(isset($editing['departamento_id']) && (int)$editing['departamento_id'] === (int)$d->id); ?>><?php echo esc_html($d->nome); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <input type="text" name="nome" placeholder="Nome" value="<?php echo esc_attr($editing['nome'] ?? ''); ?>" required>
+                <input type="text" name="slug" placeholder="slug" value="<?php echo esc_attr($editing['slug'] ?? ''); ?>">
+                <input type="color" name="cor" value="<?php echo esc_attr($editing['cor'] ?? '#7a003c'); ?>">
+                <input type="number" name="ordem" placeholder="Ordem" value="<?php echo esc_attr($editing['ordem'] ?? 0); ?>">
+                <label><input type="checkbox" name="inicial" value="1" <?php checked($editing['inicial'] ?? 0); ?>> Inicial</label>
+                <label><input type="checkbox" name="final_resolvido" value="1" <?php checked($editing['final_resolvido'] ?? 0); ?>> Final Resolvido</label>
+                <label><input type="checkbox" name="final_nao_resolvido" value="1" <?php checked($editing['final_nao_resolvido'] ?? 0); ?>> Final Não Resolvido</label>
+                <label><input type="checkbox" name="ativo" value="1" <?php checked($editing['ativo'] ?? 1); ?>> Ativo</label>
+                <?php submit_button($editing ? 'Atualizar' : 'Adicionar', 'primary', 'submit', false); ?>
+                <?php if ($editing): ?>
+                    <a href="<?php echo admin_url('admin.php?page=ans-tickets-status'); ?>" class="button">Cancelar</a>
+                <?php endif; ?>
+            </form>
+            <form method="get">
+                <input type="hidden" name="page" value="ans-tickets-status">
+                <?php $list->display(); ?>
+            </form>
+        </div>
+        <?php
+    }
 }
 
 // Garantir que a base de listagem esteja disponível antes de declarar a tabela customizada
@@ -831,3 +1190,282 @@ class ANS_Tickets_List_Table extends WP_List_Table
         ]);
     }
 }
+
+class ANS_Departamento_List_Table extends WP_List_Table
+{
+    private array $items_raw = [];
+
+    public function __construct()
+    {
+        parent::__construct([
+            'singular' => 'departamento',
+            'plural' => 'departamentos',
+            'ajax' => false,
+        ]);
+    }
+
+    public function get_columns(): array
+    {
+        return [
+            'cb' => '<input type="checkbox" />',
+            'nome' => 'Nome',
+            'slug' => 'Slug',
+            'ordem_fluxo' => 'Ordem',
+            'sla_hours' => 'SLA (h)',
+            'ativo' => 'Ativo',
+        ];
+    }
+
+    protected function column_cb($item)
+    {
+        return sprintf('<input type="checkbox" name="ids[]" value="%d" />', $item['id']);
+    }
+
+    protected function column_nome($item)
+    {
+        $actions = [
+            'edit' => sprintf('<a href="%s">Editar</a>', esc_url(add_query_arg(['page' => 'ans-tickets-departamentos', 'action' => 'edit', 'id' => $item['id']], admin_url('admin.php')))),
+            'toggle' => sprintf('<a href="%s">%s</a>', wp_nonce_url(add_query_arg(['page' => 'ans-tickets-departamentos', 'action' => 'toggle', 'id' => $item['id']], admin_url('admin.php')), 'ans_dep_toggle_' . $item['id']), $item['ativo'] ? 'Desativar' : 'Ativar'),
+        ];
+        return sprintf('<strong>%s</strong> %s', esc_html($item['nome']), $this->row_actions($actions));
+    }
+
+    protected function column_default($item, $column_name)
+    {
+        if ($column_name === 'ativo') {
+            return $item['ativo'] ? 'Sim' : 'Não';
+        }
+        return esc_html($item[$column_name] ?? '');
+    }
+
+    protected function get_bulk_actions(): array
+    {
+        return [];
+    }
+
+    public function prepare_items(): void
+    {
+        global $wpdb;
+        $table = ans_tickets_table('departamentos');
+        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+        $where = '';
+        if ($search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where = $wpdb->prepare("WHERE nome LIKE %s OR slug LIKE %s", $like, $like);
+        }
+        $this->items_raw = $wpdb->get_results("SELECT * FROM {$table} {$where} ORDER BY ordem_fluxo ASC", ARRAY_A);
+        $this->items = $this->items_raw;
+        $this->_column_headers = [$this->get_columns(), [], []];
+    }
+}
+
+class ANS_Assunto_List_Table extends WP_List_Table
+{
+    public function __construct()
+    {
+        parent::__construct([
+            'singular' => 'assunto',
+            'plural' => 'assuntos',
+            'ajax' => false,
+        ]);
+    }
+
+    public function get_columns(): array
+    {
+        return [
+            'cb' => '<input type="checkbox" />',
+            'nome' => 'Nome',
+            'slug' => 'Slug',
+            'departamento' => 'Departamento',
+            'ativo' => 'Ativo',
+        ];
+    }
+
+    protected function column_cb($item)
+    {
+        return sprintf('<input type="checkbox" name="ids[]" value="%d" />', $item['id']);
+    }
+
+    protected function column_nome($item)
+    {
+        $actions = [
+            'edit' => sprintf('<a href="%s">Editar</a>', esc_url(add_query_arg(['page' => 'ans-tickets-assuntos', 'action' => 'edit', 'id' => $item['id']], admin_url('admin.php')))),
+            'delete' => sprintf('<a href="%s" onclick="return confirm(\'Excluir este assunto?\')">Excluir</a>', wp_nonce_url(add_query_arg(['page' => 'ans-tickets-assuntos', 'action' => 'delete', 'id' => $item['id']], admin_url('admin.php')), 'ans_assunto_delete_' . $item['id'])),
+        ];
+        return sprintf('<strong>%s</strong> %s', esc_html($item['nome']), $this->row_actions($actions));
+    }
+
+    protected function column_default($item, $column_name)
+    {
+        if ($column_name === 'ativo') {
+            return $item['ativo'] ? 'Sim' : 'Não';
+        }
+        return esc_html($item[$column_name] ?? '');
+    }
+
+    public function prepare_items(): void
+    {
+        global $wpdb;
+        $a = ans_tickets_table('assuntos');
+        $d = ans_tickets_table('departamentos');
+        $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
+        $where = '';
+        if ($search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where = $wpdb->prepare("WHERE a.nome LIKE %s OR a.slug LIKE %s", $like, $like);
+        }
+        $rows = $wpdb->get_results("SELECT a.*, d.nome AS departamento FROM {$a} a LEFT JOIN {$d} d ON a.departamento_id=d.id {$where} ORDER BY a.nome ASC", ARRAY_A);
+        $this->items = $rows;
+        $this->_column_headers = [$this->get_columns(), [], []];
+    }
+}
+
+class ANS_Status_List_Table extends WP_List_Table
+{
+    public function __construct()
+    {
+        parent::__construct([
+            'singular' => 'status_custom',
+            'plural' => 'status_custom',
+            'ajax' => false,
+        ]);
+    }
+
+    public function get_columns(): array
+    {
+        return [
+            'cb' => '<input type="checkbox" />',
+            'nome' => 'Nome',
+            'slug' => 'Slug',
+            'departamento' => 'Departamento',
+            'ordem' => 'Ordem',
+            'flags' => 'Flags',
+            'ativo' => 'Ativo',
+        ];
+    }
+
+    protected function column_cb($item)
+    {
+        return sprintf('<input type="checkbox" name="ids[]" value="%d" />', $item['id']);
+    }
+
+    protected function column_nome($item)
+    {
+        $color = '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' . esc_attr($item['cor'] ?: '#ccc') . ';margin-right:6px"></span>';
+        $actions = [
+            'edit' => sprintf('<a href="%s">Editar</a>', esc_url(add_query_arg(['page' => 'ans-tickets-status', 'action' => 'edit', 'id' => $item['id']], admin_url('admin.php')))),
+            'delete' => sprintf('<a href="%s" onclick="return confirm(\'Excluir este status?\')">Excluir</a>', wp_nonce_url(add_query_arg(['page' => 'ans-tickets-status', 'action' => 'delete', 'id' => $item['id']], admin_url('admin.php')), 'ans_status_delete_' . $item['id'])),
+        ];
+        return sprintf('<strong>%s%s</strong> %s', $color, esc_html($item['nome']), $this->row_actions($actions));
+    }
+
+    protected function column_default($item, $column_name)
+    {
+        if ($column_name === 'ativo') {
+            return $item['ativo'] ? 'Sim' : 'Não';
+        }
+        if ($column_name === 'flags') {
+            $flags = [];
+            if (!empty($item['inicial'])) {
+                $flags[] = 'Inicial';
+            }
+            if (!empty($item['final_resolvido'])) {
+                $flags[] = 'Final Resolvido';
+            }
+            if (!empty($item['final_nao_resolvido'])) {
+                $flags[] = 'Final Não Resolvido';
+            }
+            return $flags ? implode(', ', $flags) : '-';
+        }
+        return esc_html($item[$column_name] ?? '');
+    }
+
+    public function prepare_items(): void
+    {
+        global $wpdb;
+        $s = ans_tickets_table('status_custom');
+        $d = ans_tickets_table('departamentos');
+        $rows = $wpdb->get_results("SELECT s.*, d.nome AS departamento FROM {$s} s LEFT JOIN {$d} d ON s.departamento_id=d.id ORDER BY s.ordem ASC, s.nome ASC", ARRAY_A);
+        $this->items = $rows;
+        $this->_column_headers = [$this->get_columns(), [], []];
+    }
+}
+    private static function seed_default_statuses(): void
+    {
+        global $wpdb;
+        $deptTable = ans_tickets_table('departamentos');
+        $statusTable = ans_tickets_table('status_custom');
+        if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $statusTable))) {
+            return;
+        }
+        $deptMap = $wpdb->get_results("SELECT id, slug FROM {$deptTable}", OBJECT_K);
+        $pipelines = [
+            'assistencial' => [
+                ['Recebido', true, false, false],
+                ['Em Análise Técnica', false, false, false],
+                ['Pendência de Documentos', false, false, false],
+                ['Aguardando Cooperado / Rede', false, false, false],
+                ['Autorizado', false, false, false],
+                ['Negado / Glosado', false, false, true],
+                ['Concluído', false, true, false],
+            ],
+            'atendimento' => [
+                ['Recebido', true, false, false],
+                ['Em Atendimento', false, false, false],
+                ['Aguardando Retorno do Beneficiário', false, false, false],
+                ['Aguardando Terceiros (TI / Comercial / Financeiro)', false, false, false],
+                ['Resolvido', false, true, false],
+                ['Não Resolvido', false, false, true],
+            ],
+            'comercial' => [
+                ['Recebido', true, false, false],
+                ['Qualificação da Demanda', false, false, false],
+                ['Proposta Enviada', false, false, false],
+                ['Aguardando Aprovação', false, false, false],
+                ['Aprovado', false, true, false],
+                ['Recusado', false, false, true],
+                ['Concluído', false, true, false],
+            ],
+            'financeiro' => [
+                ['Recebido', true, false, false],
+                ['Em Verificação', false, false, false],
+                ['Aguardando Documentos', false, false, false],
+                ['Ajustes em Execução', false, false, false],
+                ['Finalizado com Sucesso', false, true, false],
+                ['Finalizado com Pendências', false, false, true],
+            ],
+            'ouvidoria' => [
+                ['Recebido', true, false, false],
+                ['Admissibilidade / Classificação', false, false, false],
+                ['Encaminhado ao Setor Responsável', false, false, false],
+                ['Aguardando Resposta', false, false, false],
+                ['Retorno ao Beneficiário', false, false, false],
+                ['Resolvido', false, true, false],
+                ['Não Resolvido', false, false, true],
+            ],
+        ];
+        foreach ($pipelines as $slugDept => $statuses) {
+            if (empty($deptMap[$slugDept])) {
+                continue;
+            }
+            $depId = (int)$deptMap[$slugDept]->id;
+            foreach ($statuses as $idx => [$nome, $inicial, $finalOk, $finalNok]) {
+                $slug = sanitize_title($nome);
+                $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$statusTable} WHERE slug=%s AND departamento_id=%d", $slug, $depId));
+                if ($exists) {
+                    continue;
+                }
+                $wpdb->insert($statusTable, [
+                    'departamento_id' => $depId,
+                    'nome' => $nome,
+                    'slug' => $slug,
+                    'cor' => '#7a003c',
+                    'ordem' => $idx,
+                    'ativo' => 1,
+                    'inicial' => $inicial ? 1 : 0,
+                    'final_resolvido' => $finalOk ? 1 : 0,
+                    'final_nao_resolvido' => $finalNok ? 1 : 0,
+                ]);
+            }
+        }
+    }

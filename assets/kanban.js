@@ -1,7 +1,8 @@
 (function(){
   const api = (window.ANS_TICKETS_KANBAN && ANS_TICKETS_KANBAN.api) || '';
   const nonce = ANS_TICKETS_KANBAN?.nonce || '';
-  const statuses = ANS_TICKETS_KANBAN?.status || [];
+  const defaultStatuses = (ANS_TICKETS_KANBAN?.status || []).map(s=>({slug:s,name:labelFromSlug(s)}));
+  let statuses = [...defaultStatuses];
   const board = document.getElementById('kanban-board');
   const filters = {
     status: document.getElementById('kanban-filter-status'),
@@ -12,6 +13,10 @@
     doc: document.getElementById('kanban-filter-doc'),
   };
   const state = {};
+
+  function labelFromSlug(s){
+    return (s||'').replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+  }
 
   function headers(json=true){
     const h = {'X-WP-Nonce': nonce};
@@ -72,13 +77,14 @@
   function renderColumns(){
     if(!board) return;
     board.innerHTML='';
-    statuses.forEach(status=>{
+    statuses.forEach(statusObj=>{
+      const status = statusObj.slug;
       const col = document.createElement('section');
       col.className='kanban-col';
       col.dataset.status = status;
       col.innerHTML = `
         <header>
-          <div class="title">${status.replace(/_/g,' ')}</div>
+          <div class="title">${statusObj.name}</div>
           <div class="count" id="count-${status}">0</div>
         </header>
         <div class="kanban-list" data-status="${status}"></div>
@@ -164,7 +170,7 @@
   }
 
   async function reloadBoard(){
-    statuses.forEach(status=>loadColumn(status,false));
+    statuses.forEach(s=>loadColumn(s.slug,false));
   }
 
   async function populateSelects(){
@@ -182,26 +188,31 @@
     }catch(e){}
   }
 
-  function initStatusFilter(){
+  function updateStatusFilter(){
     if(!filters.status) return;
-    filters.status.innerHTML = '<option value=\"\">Status</option>'+statuses.map(s=>`<option value=\"${s}\">${s.replace(/_/g,' ')}</option>`).join('');
-    filters.status.addEventListener('change',()=>{
-      const status = filters.status.value || '';
-      if(status){
-        board.querySelectorAll('.kanban-col').forEach(col=>{
-          col.style.display = col.dataset.status===status ? '' : 'none';
-        });
-      }else{
-        board.querySelectorAll('.kanban-col').forEach(col=>col.style.display='');
-      }
-    });
+    filters.status.innerHTML = '<option value=\"\">Status</option>'+statuses.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+  }
+
+  async function loadStatuses(){
+    const depId = filters.dep?.value || '';
+    try{
+      const qs = depId ? `?departamento_id=${depId}` : '';
+      const res = await fetchJSON(`${api}/admin/status-custom${qs}`,{headers: headers(false)});
+      const arr = (res||[]).map(r=>({slug:r.slug,name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
+      statuses = arr.length ? arr : [...defaultStatuses];
+    }catch(e){
+      statuses = [...defaultStatuses];
+    }
+    updateStatusFilter();
   }
 
   async function init(){
     if(!board) return;
-    renderColumns();
     await populateSelects();
     await restoreFilters();
+    await loadStatuses();
+    renderColumns();
+    updateStatusFilter();
     await reloadBoard();
     const apply = document.getElementById('kanban-apply');
     if(apply){
@@ -210,7 +221,14 @@
         reloadBoard();
       });
     }
-    initStatusFilter();
+    if(filters.dep){
+      filters.dep.addEventListener('change', async ()=>{
+        await loadStatuses();
+        renderColumns();
+        updateStatusFilter();
+        reloadBoard();
+      });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

@@ -26,7 +26,7 @@
   const chartSubjects = document.getElementById('ans-chart-subjects');
   const chartSla = document.getElementById('ans-chart-sla');
   const chartAgents = document.getElementById('ans-chart-agents');
-  const STATUS_OPTIONS = [
+  const BASE_STATUS = [
     'aberto',
     'em_triagem',
     'aguardando_informacoes_solicitante',
@@ -37,7 +37,16 @@
     'solucao_proposta',
     'resolvido',
     'fechado',
-    'aguardando_acao'
+    'aguardando_acao',
+    'novo',
+    'atendimento',
+    'financeiro',
+    'comercial',
+    'assistencial',
+    'ouvidoria',
+    'concluido',
+    'arquivado',
+    'pendente_cliente'
   ];
   const STATUS_LABELS = {
     aberto: 'Aberto',
@@ -62,8 +71,10 @@
     assistencial: 'Assistencial',
     ouvidoria: 'Ouvidoria'
   };
+  let statusOptions = BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)}));
 
-  const statusLabel = (s)=>STATUS_LABELS[s]||s;
+  const statusLabel = (s)=>STATUS_LABELS[s]||labelFromSlug(s);
+  function labelFromSlug(s){ return (s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
   const formatDate = (val)=>{
     if(!val) return '-';
     const date = new Date(val.replace(' ','T'));
@@ -362,7 +373,7 @@
           <div class="ans-card action-card">
             <h4>🎯 Ações administrativas</h4>
             <div class="action-grid">
-              <label>🏷 Status<select id="update-status"><option value="">Status</option>${STATUS_OPTIONS.map(s=>`<option value="${s}" ${s===t.status?'selected':''}>${statusLabel(s)}</option>`).join('')}</select></label>
+              <label>🏷 Status<select id="update-status"><option value="">Status</option>${(statusOptions||[]).map(s=>`<option value="${s.slug}" ${s.slug===t.status?'selected':''}>${s.name}</option>`).join('')}</select></label>
               <label>🧭 Depto<select id="update-dep"><option value="">Departamento</option>${depCache.map(d=>`<option value="${d.id}" ${d.id===t.departamento_id?'selected':''}>${d.nome}</option>`).join('')}</select></label>
               <label>⚡ Prioridade<select id="update-pri"><option value="">Prioridade</option><option value="baixa" ${t.prioridade==='baixa'?'selected':''}>Baixa</option><option value="media" ${t.prioridade==='media'?'selected':''}>Média</option><option value="alta" ${t.prioridade==='alta'?'selected':''}>Alta</option></select></label>
               <label>👤 Responsável<select id="assign-agent"><option value="">Responsável</option>${agentsCache.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')}</select></label>

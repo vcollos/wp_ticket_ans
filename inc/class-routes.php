@@ -301,7 +301,7 @@ class ANS_Tickets_Routes
             'methods' => 'GET',
             'callback' => [self::class, 'admin_list_status_custom'],
             'permission_callback' => function () {
-                return ans_tickets_can_manage();
+                return ans_tickets_can_answer();
             },
         ]);
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/status-custom', [

@@ -1,4 +1,4 @@
-# ANS Tickets (Uniodonto) – v0.6.3
+# ANS Tickets (Uniodonto) – v0.7.0
 
 Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-end para beneficiários e painel (wp-admin ou página pública) para atendentes.
 
@@ -34,6 +34,7 @@ Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-en
 - Sequencial diário: definir o próximo número do dia ou zerar todos os dias salvos.
 - Departamentos: criar/editar/excluir, ordem/SLA/cor/ativo e associação de usuários para atendimento.
 - Shortcodes destacados para copiar.
+- Listas nativas WP para Departamentos, Assuntos e Status custom (menu ANS Tickets) com busca e ações de editar/ativar/excluir.
 
 ## Painel de chamados (wp-admin → ANS Tickets → Chamados)
 - Tabela com busca (protocolo/cliente/documento), ordenação, paginação e exclusão (bulk). Apenas administradores.
@@ -79,4 +80,4 @@ Tabelas personalizadas: `ans_operadora`, `ans_departamentos`, `ans_clientes` (wh
 - Cron de SLA a cada 5 minutos: muda status para `aguardando_acao`, cria nota interna e notifica responsável.
 
 ## Versão
-- Atual: **0.6.3**
+- Atual: **0.7.0**
