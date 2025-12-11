@@ -1,0 +1,22 @@
+.ans-kanban{font-family:'Inter','Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;gap:12px}
+.kanban-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;align-items:center}
+.kanban-filters select,.kanban-filters input{padding:10px 12px;border:1px solid #e4e7ec;border-radius:8px;background:#fbfbfd;font-weight:600}
+.kanban-filters .ans-btn{padding:10px 12px;border:none;border-radius:8px;background:#7a003c;color:#fff;font-weight:700;cursor:pointer}
+.kanban-board{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;align-items:flex-start}
+.kanban-col{background:#f8f8fa;border:1px solid #e4e7ec;border-radius:12px;display:flex;flex-direction:column;gap:10px;min-height:320px;box-shadow:0 8px 18px rgba(0,0,0,0.04)}
+.kanban-col header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:0.05em;color:#4a4a4a}
+.kanban-list{display:flex;flex-direction:column;gap:8px;padding:0 10px 10px;min-height:240px}
+.kanban-list.drag-over{background:#eef1ff;border:1px dashed #7a003c;border-radius:10px}
+.kanban-card{background:#fff;border:1px solid #e4e7ec;border-radius:10px;padding:10px;box-shadow:0 6px 14px rgba(0,0,0,0.04);cursor:grab;display:flex;flex-direction:column;gap:6px}
+.kanban-card.dragging{opacity:0.6}
+.kanban-top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.kanban-card .client{font-weight:800;color:#1c1c1c}
+.kanban-card .meta{font-size:12px;color:#4a4a4a}
+.priority{padding:4px 8px;border-radius:12px;font-size:12px;text-transform:capitalize}
+.pri-alta{background:#ff637e33;color:#a60000}
+.pri-media{background:#ffb00033;color:#8a5b00}
+.pri-baixa{background:#e1ff7b66;color:#4a7a00}
+.sla{height:8px;border-radius:999px;background:#f0f0f0;overflow:hidden}
+.sla span{display:block;height:100%;background:linear-gradient(90deg,#7a003c,#c15f9c)}
+.kanban-load{margin:0 10px 10px;border:1px dashed #d0d0d0;background:transparent;padding:8px;border-radius:8px;cursor:pointer;font-weight:700;color:#4a4a4a}
+.proto{font-weight:800;color:#1c1c1c}

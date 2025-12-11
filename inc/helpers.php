@@ -60,3 +60,50 @@ function ans_tickets_can_manage(): bool
 {
     return current_user_can('ans_manage_tickets');
 }
+
+function ans_tickets_default_prioridades(): array
+{
+    return ['baixa', 'media', 'alta'];
+}
+
+function ans_tickets_custom_statuses(): array
+{
+    global $wpdb;
+    $table = ans_tickets_table('status_custom');
+    if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
+        return [];
+    }
+    $rows = $wpdb->get_results("SELECT slug FROM {$table} WHERE ativo=1", ARRAY_A);
+    return array_map(function ($row) {
+        return $row['slug'];
+    }, $rows);
+}
+
+function ans_tickets_statuses(): array
+{
+    $base = [
+        'aberto',
+        'em_triagem',
+        'aguardando_informacoes_solicitante',
+        'em_analise',
+        'em_execucao',
+        'aguardando_terceiros',
+        'aguardando_aprovacao',
+        'solucao_proposta',
+        'resolvido',
+        'fechado',
+        'aguardando_acao',
+        // legados
+        'novo',
+        'atendimento',
+        'financeiro',
+        'comercial',
+        'assistencial',
+        'ouvidoria',
+        'concluido',
+        'arquivado',
+        'pendente_cliente',
+    ];
+    $custom = ans_tickets_custom_statuses();
+    return array_values(array_unique(array_merge($base, $custom)));
+}

@@ -70,6 +70,7 @@
 .ans-thread-title{font-weight:700;margin-bottom:8px;color:var(--ans-text)}
 .ans-thread{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
 .ans-thread-item{border:1px solid var(--ans-border);border-radius:var(--ans-radius);padding:12px;background:#fff;box-shadow:0 4px 10px rgba(0,0,0,0.02)}
+.ans-thread-sep{background:#f7f7f7;font-weight:700;color:var(--ans-text-muted);text-align:center}
 .ans-thread-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px}
 .ans-thread-body{line-height:1.5;color:var(--ans-text);word-break:break-word}
 .ans-thread-date{font-size:12px;color:var(--ans-text-muted)}
@@ -104,7 +105,7 @@
 .ans-status-financeiro{background:#f0f5ff;border-color:#c8dafc;color:#2952cc}
 .ans-status-comercial{background:#f0fbff;border-color:#c8edf7;color:#176b7d}
 .ans-status-ouvidoria{background:#fef0f5;border-color:#f7c8d8;color:#a11f4a}
-.ans-ouvidoria-notice{margin-bottom:12px;padding:12px 14px;border:1px solid var(--ans-border);border-radius:10px;background:#fff7fb;color:var(--ans-text);box-shadow:0 4px 12px rgba(0,0,0,0.04);line-height:1.5}
+.ans-ouvidoria-notice{grid-column:1/-1;margin-bottom:12px;padding:12px 14px;border:1px solid var(--ans-border);border-radius:10px;background:#fff7fb;color:var(--ans-text);box-shadow:0 4px 12px rgba(0,0,0,0.04);line-height:1.5;width:100%}
 
 @media(max-width:768px){
   #ans-ticket-track form{flex-direction:column;align-items:flex-start}

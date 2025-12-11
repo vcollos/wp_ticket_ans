@@ -44,6 +44,12 @@ class ANS_Tickets_Routes
             'permission_callback' => '__return_true',
         ]);
 
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/departamentos/(?P<id>\\d+)/assuntos', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'list_assuntos_public'],
+            'permission_callback' => '__return_true',
+        ]);
+
         // Admin / Atendente
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/departamentos', [
             'methods' => 'GET',
@@ -133,11 +139,159 @@ class ANS_Tickets_Routes
             },
         ]);
 
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/tickets/(?P<id>\\d+)/transfer', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_transfer_ticket'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/stats', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_stats'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/agents', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_agents'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/upload', [
             'methods' => 'POST',
             'callback' => [self::class, 'admin_upload'],
             'permission_callback' => function () {
                 return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/respostas-rapidas', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_quick_replies'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/respostas-rapidas', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_create_quick_reply'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/respostas-rapidas/(?P<id>\\d+)', [
+            'methods' => 'PUT',
+            'callback' => [self::class, 'admin_update_quick_reply'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/respostas-rapidas/(?P<id>\\d+)', [
+            'methods' => 'DELETE',
+            'callback' => [self::class, 'admin_delete_quick_reply'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/filtros-salvos', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_saved_filters'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/filtros-salvos', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_create_saved_filter'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/filtros-salvos/(?P<id>\\d+)', [
+            'methods' => ['PUT', 'DELETE'],
+            'callback' => [self::class, 'admin_update_or_delete_filter'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/kanban/tickets', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_kanban'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/kanban/filters', [
+            'methods' => ['GET', 'POST'],
+            'callback' => [self::class, 'admin_kanban_filters'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/reports/v2', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_reports_v2'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_assuntos'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_create_assunto'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos/(?P<id>\\d+)', [
+            'methods' => ['PUT','DELETE'],
+            'callback' => [self::class, 'admin_update_assunto'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/status-custom', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_status_custom'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/status-custom', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_create_status_custom'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/status-custom/(?P<id>\\d+)', [
+            'methods' => ['PUT','DELETE'],
+            'callback' => [self::class, 'admin_update_status_custom'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
             },
         ]);
     }
@@ -158,11 +312,18 @@ class ANS_Tickets_Routes
         }
 
         $assunto = sanitize_text_field($req->get_param('assunto'));
-        
-        // Buscar departamento pelo slug
-        $departamento_id = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_departamentos} WHERE slug=%s AND ativo=1", $assunto));
-        if (!$departamento_id) {
-            return new WP_REST_Response(['error' => 'Departamento inválido ou inativo'], 400);
+        $departamento_id = (int)$req->get_param('departamento_id');
+
+        if ($departamento_id) {
+            $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_departamentos} WHERE id=%d AND ativo=1", $departamento_id));
+            if (!$exists) {
+                return new WP_REST_Response(['error' => 'Departamento inválido ou inativo'], 400);
+            }
+        } else {
+            $departamento_id = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$table_departamentos} WHERE slug=%s AND ativo=1", $assunto));
+            if (!$departamento_id) {
+                return new WP_REST_Response(['error' => 'Departamento inválido ou inativo'], 400);
+            }
         }
 
         $wpdb->query('START TRANSACTION');
@@ -348,10 +509,18 @@ class ANS_Tickets_Routes
         }
 
         $interacoes = $wpdb->get_results($wpdb->prepare(
-            "SELECT autor_tipo, autor_id, mensagem, interno, created_at FROM {$table_interacoes} WHERE ticket_id=%d ORDER BY created_at ASC",
+            "SELECT id, autor_tipo, autor_id, mensagem, interno, created_at FROM {$table_interacoes} WHERE ticket_id=%d ORDER BY created_at ASC",
             $ticket['id']
         ));
-        $ticket['interacoes'] = $interacoes;
+        $anexos = $wpdb->get_results($wpdb->prepare(
+            "SELECT a.*, p.guid AS url FROM {$table_anexos} a LEFT JOIN {$wpdb->posts} p ON a.attachment_id=p.ID WHERE a.ticket_id=%d ORDER BY a.created_at ASC",
+            $ticket['id']
+        ));
+        // Oculta interações internas para o cliente
+        $ticket['interacoes'] = array_values(array_filter($interacoes, function($i){
+            return empty($i->interno);
+        }));
+        $ticket['anexos'] = $anexos;
         return $ticket;
     }
 
@@ -400,6 +569,7 @@ class ANS_Tickets_Routes
         $t = ans_tickets_table('tickets');
         $c = ans_tickets_table('clientes');
         $d = ans_tickets_table('departamentos');
+        $u = $wpdb->users;
         $where = [];
         $params = [];
         if ($req->get_param('status')) {
@@ -418,7 +588,18 @@ class ANS_Tickets_Routes
             $where[] = 'c.documento=%s';
             $params[] = preg_replace('/\\D/', '', $req->get_param('documento'));
         }
-        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome FROM {$t} t JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id";
+        if ($req->get_param('responsavel_id')) {
+            $where[] = 't.responsavel_id=%d';
+            $params[] = (int)$req->get_param('responsavel_id');
+        }
+        if ($req->get_param('prioridade')) {
+            $pri = sanitize_text_field($req->get_param('prioridade'));
+            if (in_array($pri, ['baixa', 'media', 'alta'], true)) {
+                $where[] = 't.prioridade=%s';
+                $params[] = $pri;
+            }
+        }
+        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, u.display_name AS responsavel_nome FROM {$t} t JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id LEFT JOIN {$u} u ON t.responsavel_id=u.ID";
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
@@ -438,7 +619,7 @@ class ANS_Tickets_Routes
         $id = (int)$req['id'];
 
         $ticket = $wpdb->get_row($wpdb->prepare(
-            "SELECT t.*, c.nome_completo, c.documento, d.nome AS departamento_nome FROM {$t} t JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id WHERE t.id=%d",
+            "SELECT t.*, c.nome_completo, c.documento, d.nome AS departamento_nome, d.sla_hours AS departamento_sla_hours, u.display_name AS responsavel_nome FROM {$t} t JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id LEFT JOIN {$wpdb->users} u ON t.responsavel_id=u.ID WHERE t.id=%d",
             $id
         ), ARRAY_A);
         if (!$ticket) {
@@ -449,7 +630,7 @@ class ANS_Tickets_Routes
             $id
         ));
         $ticket['anexos'] = $wpdb->get_results($wpdb->prepare(
-            "SELECT a.*, p.guid AS url FROM {$a} a LEFT JOIN {$wpdb->posts} p ON a.attachment_id=p.ID WHERE a.ticket_id=%d",
+            "SELECT a.*, p.guid AS url FROM {$a} a LEFT JOIN {$wpdb->posts} p ON a.attachment_id=p.ID WHERE a.ticket_id=%d ORDER BY a.created_at ASC",
             $id
         ));
         return $ticket;
@@ -459,28 +640,7 @@ class ANS_Tickets_Routes
     {
         global $wpdb;
         $t = ans_tickets_table('tickets');
-        $allowed_status = [
-            'aberto',
-            'em_triagem',
-            'aguardando_informacoes_solicitante',
-            'em_analise',
-            'em_execucao',
-            'aguardando_terceiros',
-            'aguardando_aprovacao',
-            'solucao_proposta',
-            'resolvido',
-            'fechado',
-            // Valores legados ainda aceitos para compatibilidade
-            'novo',
-            'atendimento',
-            'financeiro',
-            'comercial',
-            'assistencial',
-            'ouvidoria',
-            'concluido',
-            'arquivado',
-            'pendente_cliente'
-        ];
+        $allowed_status = ans_tickets_statuses();
         $data = [];
         if ($req->get_param('status')) {
             $status = sanitize_text_field($req->get_param('status'));
@@ -494,6 +654,9 @@ class ANS_Tickets_Routes
         }
         if ($req->get_param('prioridade')) {
             $data['prioridade'] = sanitize_text_field($req->get_param('prioridade'));
+        }
+        if ($req->get_param('responsavel_id')) {
+            $data['responsavel_id'] = (int)$req->get_param('responsavel_id');
         }
         if (empty($data)) {
             return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
@@ -527,6 +690,105 @@ class ANS_Tickets_Routes
         return ['status' => 'ok', 'interacao_id' => $wpdb->insert_id];
     }
 
+    public static function admin_transfer_ticket(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $id = (int)$req['id'];
+        $new_dep = (int)$req->get_param('departamento_id');
+        if (!$new_dep) {
+            return new WP_REST_Response(['error' => 'departamento_id é obrigatório'], 400);
+        }
+        $t = ans_tickets_table('tickets');
+        $d = ans_tickets_table('departamentos');
+        $i = ans_tickets_table('interacoes');
+
+        $ticket = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$t} WHERE id=%d", $id), ARRAY_A);
+        if (!$ticket) {
+            return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+        $old_dep_name = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$d} WHERE id=%d", $ticket['departamento_id']));
+        $new_dep_name = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$d} WHERE id=%d", $new_dep));
+        if (!$new_dep_name) {
+            return new WP_REST_Response(['error' => 'Departamento inválido'], 400);
+        }
+
+        $wpdb->update($t, [
+            'departamento_id' => $new_dep,
+            'updated_at' => current_time('mysql')
+        ], ['id' => $id]);
+
+        $msg = sprintf('Ticket transferido de %s para %s', $old_dep_name ?: 'N/A', $new_dep_name);
+        $wpdb->insert($i, [
+            'ticket_id' => $id,
+            'autor_tipo' => 'usuario',
+            'autor_id' => get_current_user_id(),
+            'mensagem' => $msg,
+            'interno' => 1,
+        ]);
+
+        return new WP_REST_Response(['message' => 'Transferido', 'departamento' => $new_dep_name], 200);
+    }
+
+    public static function admin_stats(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $t = ans_tickets_table('tickets');
+        $d = ans_tickets_table('departamentos');
+        $i = ans_tickets_table('interacoes');
+        $stats = [];
+
+        $stats['status_counts'] = $wpdb->get_results("SELECT status, COUNT(*) AS total FROM {$t} GROUP BY status", ARRAY_A);
+        $stats['department_counts'] = $wpdb->get_results("SELECT d.nome, COUNT(*) AS total FROM {$t} t LEFT JOIN {$d} d ON t.departamento_id=d.id GROUP BY d.nome", ARRAY_A);
+        $stats['subject_counts'] = $wpdb->get_results("SELECT assunto, COUNT(*) AS total FROM {$t} GROUP BY assunto", ARRAY_A);
+        $stats['avg_resolution_hours'] = (float)$wpdb->get_var("SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) FROM {$t} WHERE status IN ('fechado','resolvido')");
+        $stats['avg_first_response_hours'] = (float)$wpdb->get_var(
+            "SELECT AVG(TIMESTAMPDIFF(HOUR, t.created_at, iu.first_response))
+             FROM {$t} t
+             JOIN (
+                SELECT ticket_id, MIN(created_at) AS first_response
+                FROM {$i}
+                WHERE autor_tipo='usuario'
+                GROUP BY ticket_id
+             ) iu ON iu.ticket_id = t.id"
+        );
+        $stats['dept_resolution'] = $wpdb->get_results(
+            "SELECT d.nome, AVG(TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at)) AS avg_hours
+             FROM {$t} t
+             LEFT JOIN {$d} d ON t.departamento_id=d.id
+             WHERE t.status IN ('fechado','resolvido')
+             GROUP BY d.nome",
+            ARRAY_A
+        );
+        $stats['top_agents'] = $wpdb->get_results(
+            "SELECT u.display_name, COUNT(*) as total
+             FROM {$i} inter
+             LEFT JOIN {$wpdb->users} u ON inter.autor_id=u.ID
+             WHERE inter.autor_tipo='usuario'
+             GROUP BY inter.autor_id
+             ORDER BY total DESC
+             LIMIT 5",
+            ARRAY_A
+        );
+
+        return new WP_REST_Response($stats, 200);
+    }
+
+    public static function admin_agents(WP_REST_Request $req)
+    {
+        $users = get_users([
+            'number' => 200,
+            'capability' => 'ans_answer_tickets',
+        ]);
+        $data = [];
+        foreach ($users as $u) {
+            $data[] = [
+                'id' => $u->ID,
+                'name' => $u->display_name,
+                'email' => $u->user_email,
+            ];
+        }
+        return $data;
+    }
     public static function admin_upload(WP_REST_Request $req)
     {
         $files = $req->get_file_params();
@@ -654,6 +916,14 @@ class ANS_Tickets_Routes
         $table = ans_tickets_table('departamentos');
         $rows = $wpdb->get_results("SELECT id, nome, slug, ordem_fluxo FROM {$table} WHERE ativo=1 ORDER BY ordem_fluxo ASC");
         return $rows;
+    }
+
+    public static function list_assuntos_public(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('assuntos');
+        $dep = (int)$req['id'];
+        return $wpdb->get_results($wpdb->prepare("SELECT id, nome, slug FROM {$table} WHERE departamento_id=%d AND ativo=1 ORDER BY nome ASC", $dep));
     }
 
     public static function list_departamentos(WP_REST_Request $req)
@@ -812,5 +1082,529 @@ class ANS_Tickets_Routes
         }
         
         return new WP_REST_Response(['message' => 'Departamento excluído com sucesso'], 200);
+    }
+
+    public static function admin_list_quick_replies(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('respostas_rapidas');
+        $links = ans_tickets_table('respostas_rapidas_links');
+        $dept = (int)$req->get_param('departamento_id');
+        $assunto_id = (int)$req->get_param('assunto_id');
+        $status = sanitize_text_field($req->get_param('status'));
+        $user_id = get_current_user_id();
+
+        $baseWhere = "WHERE ativo=1";
+        $globais = $wpdb->get_results("SELECT * FROM {$table} {$baseWhere} AND escopo='global' ORDER BY updated_at DESC", ARRAY_A);
+        $pessoais = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table} {$baseWhere} AND escopo='pessoal' AND user_id=%d ORDER BY updated_at DESC", $user_id), ARRAY_A);
+
+        $matchIds = [];
+        $conditions = [];
+        $params = [];
+        if ($dept) {
+            $conditions[] = "departamento_id=%d";
+            $params[] = $dept;
+        }
+        if ($assunto_id) {
+            $conditions[] = "assunto_id=%d";
+            $params[] = $assunto_id;
+        }
+        if ($status) {
+            $conditions[] = "status_slug=%s";
+            $params[] = $status;
+        }
+        if ($conditions) {
+            $sql = "SELECT DISTINCT resposta_id FROM {$links} WHERE " . implode(' OR ', $conditions);
+            $ids = $wpdb->get_col($wpdb->prepare($sql, $params));
+            if ($ids) {
+                $in = implode(',', array_map('intval', $ids));
+                $matchIds = $wpdb->get_results("SELECT * FROM {$table} WHERE id IN ($in) AND ativo=1 ORDER BY updated_at DESC", ARRAY_A);
+            }
+        }
+
+        $deptRows = [];
+        if ($dept && !$conditions) {
+            $deptRows = $wpdb->get_results($wpdb->prepare("SELECT * FROM {$table} {$baseWhere} AND escopo='departamento' AND departamento_id=%d ORDER BY updated_at DESC", $dept), ARRAY_A);
+        }
+
+        return [
+            'globais' => $globais,
+            'departamento' => $deptRows,
+            'pessoais' => $pessoais,
+            'vinculadas' => $matchIds,
+        ];
+    }
+
+    public static function admin_create_quick_reply(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('respostas_rapidas');
+        $linksTable = ans_tickets_table('respostas_rapidas_links');
+
+        $escopo = sanitize_text_field($req->get_param('escopo'));
+        $titulo = sanitize_text_field($req->get_param('titulo'));
+        $conteudo = wp_kses_post($req->get_param('conteudo'));
+        $departamento_ids = (array)$req->get_param('departamentos');
+        $assunto_ids = (array)$req->get_param('assuntos');
+        $statuses = (array)$req->get_param('statuses');
+        $departamento_id = (int)$req->get_param('departamento_id'); // fallback legado
+
+        if (!$titulo || !$conteudo || !$escopo) {
+            return new WP_REST_Response(['error' => 'Campos obrigatórios: titulo, conteudo, escopo'], 400);
+        }
+
+        if ($escopo === 'global' && !current_user_can('manage_options')) {
+            return new WP_REST_Response(['error' => 'Apenas administradores podem criar globais'], 403);
+        }
+        if ($escopo === 'departamento' && !ans_tickets_can_manage()) {
+            return new WP_REST_Response(['error' => 'Sem permissão para criar no departamento'], 403);
+        }
+        if ($escopo === 'departamento' && !$departamento_id) {
+            return new WP_REST_Response(['error' => 'departamento_id é obrigatório para escopo departamento'], 400);
+        }
+
+        $data = [
+            'titulo' => $titulo,
+            'conteudo' => $conteudo,
+            'escopo' => $escopo,
+            'departamento_id' => $departamento_id ?: null,
+            'user_id' => $escopo === 'pessoal' ? get_current_user_id() : null,
+            'ativo' => 1,
+        ];
+
+        $inserted = $wpdb->insert($table, $data);
+        if ($inserted === false) {
+            return new WP_REST_Response(['error' => 'Erro ao salvar'], 500);
+        }
+        $replyId = $wpdb->insert_id;
+        $linkRows = [];
+        foreach ($departamento_ids as $dep) {
+            $linkRows[] = ['departamento_id' => (int)$dep];
+        }
+        foreach ($assunto_ids as $ass) {
+            $linkRows[] = ['assunto_id' => (int)$ass];
+        }
+        foreach ($statuses as $st) {
+            $linkRows[] = ['status_slug' => sanitize_text_field($st)];
+        }
+        foreach ($linkRows as $row) {
+            $row['resposta_id'] = $replyId;
+            $wpdb->insert($linksTable, $row);
+        }
+        return ['id' => $replyId];
+    }
+
+    public static function admin_update_quick_reply(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('respostas_rapidas');
+        $linksTable = ans_tickets_table('respostas_rapidas_links');
+        $id = (int)$req['id'];
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A);
+        if (!$row) {
+            return new WP_REST_Response(['error' => 'Não encontrado'], 404);
+        }
+        if ($row['escopo'] === 'global' && !current_user_can('manage_options')) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        if ($row['escopo'] === 'departamento' && !ans_tickets_can_manage()) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        if ($row['escopo'] === 'pessoal' && (int)$row['user_id'] !== get_current_user_id()) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        $data = [];
+        if ($req->get_param('titulo')) {
+            $data['titulo'] = sanitize_text_field($req->get_param('titulo'));
+        }
+        if ($req->get_param('conteudo')) {
+            $data['conteudo'] = wp_kses_post($req->get_param('conteudo'));
+        }
+        if ($req->get_param('ativo') !== null) {
+            $data['ativo'] = $req->get_param('ativo') ? 1 : 0;
+        }
+        if (empty($data)) {
+            return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
+        }
+        $updated = $wpdb->update($table, $data, ['id' => $id]);
+        if ($updated === false) {
+            return new WP_REST_Response(['error' => 'Erro ao atualizar'], 500);
+        }
+        if ($req->get_param('departamentos') !== null || $req->get_param('assuntos') !== null || $req->get_param('statuses') !== null) {
+            $wpdb->delete($linksTable, ['resposta_id' => $id]);
+            $depIds = (array)$req->get_param('departamentos');
+            $assuntos = (array)$req->get_param('assuntos');
+            $statuses = (array)$req->get_param('statuses');
+            $linkRows = [];
+            foreach ($depIds as $dep) {
+                $linkRows[] = ['departamento_id' => (int)$dep];
+            }
+            foreach ($assuntos as $ass) {
+                $linkRows[] = ['assunto_id' => (int)$ass];
+            }
+            foreach ($statuses as $st) {
+                $linkRows[] = ['status_slug' => sanitize_text_field($st)];
+            }
+            foreach ($linkRows as $rowLink) {
+                $rowLink['resposta_id'] = $id;
+                $wpdb->insert($linksTable, $rowLink);
+            }
+        }
+        return ['status' => 'ok'];
+    }
+
+    public static function admin_delete_quick_reply(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('respostas_rapidas');
+        $linksTable = ans_tickets_table('respostas_rapidas_links');
+        $id = (int)$req['id'];
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", $id), ARRAY_A);
+        if (!$row) {
+            return new WP_REST_Response(['error' => 'Não encontrado'], 404);
+        }
+        if ($row['escopo'] === 'global' && !current_user_can('manage_options')) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        if ($row['escopo'] === 'departamento' && !ans_tickets_can_manage()) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        if ($row['escopo'] === 'pessoal' && (int)$row['user_id'] !== get_current_user_id()) {
+            return new WP_REST_Response(['error' => 'Sem permissão'], 403);
+        }
+        $wpdb->delete($table, ['id' => $id]);
+        $wpdb->delete($linksTable, ['resposta_id' => $id]);
+        return ['status' => 'deleted'];
+    }
+
+    public static function admin_list_saved_filters(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('filtros_salvos');
+        $user_id = get_current_user_id();
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT id, nome, filtros, created_at FROM {$table} WHERE user_id=%d ORDER BY created_at DESC", $user_id), ARRAY_A);
+        foreach ($rows as &$row) {
+            $row['filtros'] = json_decode($row['filtros'], true);
+        }
+        return $rows;
+    }
+
+    public static function admin_create_saved_filter(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('filtros_salvos');
+        $nome = sanitize_text_field($req->get_param('nome'));
+        $filtros = $req->get_param('filtros');
+        if (!$nome || !$filtros) {
+            return new WP_REST_Response(['error' => 'Campos obrigatórios: nome, filtros'], 400);
+        }
+        $json = wp_json_encode($filtros);
+        $wpdb->insert($table, [
+            'user_id' => get_current_user_id(),
+            'nome' => $nome,
+            'filtros' => $json,
+        ]);
+        return ['id' => $wpdb->insert_id];
+    }
+
+    public static function admin_update_or_delete_filter(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('filtros_salvos');
+        $id = (int)$req['id'];
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d AND user_id=%d", $id, get_current_user_id()), ARRAY_A);
+        if (!$row) {
+            return new WP_REST_Response(['error' => 'Não encontrado'], 404);
+        }
+        if ($req->get_method() === 'DELETE') {
+            $wpdb->delete($table, ['id' => $id]);
+            return ['status' => 'deleted'];
+        }
+        $data = [];
+        if ($req->get_param('nome')) {
+            $data['nome'] = sanitize_text_field($req->get_param('nome'));
+        }
+        if ($req->get_param('filtros') !== null) {
+            $data['filtros'] = wp_json_encode($req->get_param('filtros'));
+        }
+        if (empty($data)) {
+            return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
+        }
+        $wpdb->update($table, $data, ['id' => $id]);
+        return ['status' => 'ok'];
+    }
+
+    public static function admin_list_kanban(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $statusParam = sanitize_text_field($req->get_param('status'));
+        $statusList = ans_tickets_statuses();
+        $status = in_array($statusParam, $statusList, true) ? $statusParam : 'aberto';
+        $limit = (int)$req->get_param('per_page') ?: 30;
+        $offset = (int)$req->get_param('offset') ?: 0;
+
+        $t = ans_tickets_table('tickets');
+        $c = ans_tickets_table('clientes');
+        $d = ans_tickets_table('departamentos');
+
+        $where = ['t.status=%s'];
+        $params = [$status];
+
+        if ($req->get_param('departamento_id')) {
+            $where[] = 't.departamento_id=%d';
+            $params[] = (int)$req->get_param('departamento_id');
+        }
+        if ($req->get_param('responsavel_id')) {
+            $where[] = 't.responsavel_id=%d';
+            $params[] = (int)$req->get_param('responsavel_id');
+        }
+        if ($req->get_param('prioridade')) {
+            $where[] = 't.prioridade=%s';
+            $params[] = sanitize_text_field($req->get_param('prioridade'));
+        }
+        if ($req->get_param('documento')) {
+            $where[] = 'c.documento=%s';
+            $params[] = preg_replace('/\\D/', '', $req->get_param('documento'));
+        }
+        if ($req->get_param('protocolo')) {
+            $where[] = 't.protocolo=%s';
+            $params[] = sanitize_text_field($req->get_param('protocolo'));
+        }
+
+        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours
+                FROM {$t} t
+                JOIN {$c} c ON t.cliente_id=c.id
+                LEFT JOIN {$d} d ON t.departamento_id=d.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY t.updated_at DESC
+                LIMIT %d OFFSET %d";
+        $params[] = $limit;
+        $params[] = $offset;
+        $prepared = $wpdb->prepare($sql, $params);
+        $items = $wpdb->get_results($prepared);
+
+        $counts = $wpdb->get_results("SELECT status, COUNT(*) as total FROM {$t} GROUP BY status", ARRAY_A);
+
+        return [
+            'items' => $items,
+            'status' => $status,
+            'counts' => $counts,
+            'limit' => $limit,
+            'offset' => $offset,
+        ];
+    }
+
+    public static function admin_kanban_filters(WP_REST_Request $req)
+    {
+        $key = 'ans_kanban_filters';
+        $user_id = get_current_user_id();
+        if ($req->get_method() === 'GET') {
+            $saved = get_user_meta($user_id, $key, true);
+            return $saved ?: [];
+        }
+        $filters = $req->get_param('filters');
+        if (!is_array($filters)) {
+            return new WP_REST_Response(['error' => 'Filtros inválidos'], 400);
+        }
+        update_user_meta($user_id, $key, $filters);
+        return ['status' => 'ok'];
+    }
+
+    public static function admin_reports_v2(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $t = ans_tickets_table('tickets');
+        $d = ans_tickets_table('departamentos');
+        $i = ans_tickets_table('interacoes');
+        $users = $wpdb->users;
+
+        $firstResponseDept = $wpdb->get_results(
+            "SELECT d.nome AS departamento, AVG(TIMESTAMPDIFF(HOUR, t.created_at, ir.first_response)) AS horas
+             FROM {$t} t
+             JOIN (
+                SELECT ticket_id, MIN(created_at) AS first_response
+                FROM {$i}
+                WHERE autor_tipo='usuario'
+                GROUP BY ticket_id
+             ) ir ON ir.ticket_id = t.id
+             LEFT JOIN {$d} d ON t.departamento_id=d.id
+             GROUP BY d.nome",
+            ARRAY_A
+        );
+
+        $firstResponseAgent = $wpdb->get_results(
+            "SELECT u.display_name AS agente, AVG(TIMESTAMPDIFF(HOUR, t.created_at, ir.first_response)) AS horas
+             FROM {$t} t
+             JOIN (
+                SELECT ticket_id, MIN(created_at) AS first_response, autor_id
+                FROM {$i}
+                WHERE autor_tipo='usuario'
+                GROUP BY ticket_id, autor_id
+             ) ir ON ir.ticket_id = t.id
+             LEFT JOIN {$users} u ON ir.autor_id=u.ID
+             GROUP BY ir.autor_id",
+            ARRAY_A
+        );
+
+        $slaResumo = $wpdb->get_row(
+            "SELECT 
+                SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) <= d.sla_hours THEN 1 ELSE 0 END) AS cumprido,
+                SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) > d.sla_hours THEN 1 ELSE 0 END) AS estourado
+             FROM {$t} t
+             LEFT JOIN {$d} d ON t.departamento_id=d.id
+             WHERE t.status IN ('fechado','resolvido','concluido')",
+            ARRAY_A
+        );
+
+        $porAssunto = $wpdb->get_results("SELECT assunto, COUNT(*) as total FROM {$t} GROUP BY assunto", ARRAY_A);
+
+        $porHora = $wpdb->get_results("SELECT HOUR(created_at) AS hora, COUNT(*) as total FROM {$t} GROUP BY HOUR(created_at)", ARRAY_A);
+
+        $heatmap = $wpdb->get_results(
+            "SELECT DAYOFWEEK(created_at) AS dia, HOUR(created_at) AS hora, COUNT(*) AS total
+             FROM {$t}
+             GROUP BY dia, hora",
+            ARRAY_A
+        );
+
+        return [
+            'first_response_departamento' => $firstResponseDept,
+            'first_response_agente' => $firstResponseAgent,
+            'sla' => $slaResumo,
+            'assunto' => $porAssunto,
+            'por_hora' => $porHora,
+            'heatmap' => $heatmap,
+        ];
+    }
+
+    public static function admin_list_assuntos(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('assuntos');
+        $dep = (int)$req->get_param('departamento_id');
+        $where = $dep ? $wpdb->prepare("WHERE departamento_id=%d", $dep) : '';
+        return $wpdb->get_results("SELECT * FROM {$table} {$where} ORDER BY nome ASC");
+    }
+
+    public static function admin_create_assunto(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('assuntos');
+        $dep = (int)$req->get_param('departamento_id');
+        $nome = sanitize_text_field($req->get_param('nome'));
+        $slug = sanitize_title($req->get_param('slug') ?: $nome);
+        if (!$dep || !$nome) {
+            return new WP_REST_Response(['error' => 'departamento_id e nome são obrigatórios'], 400);
+        }
+        $insert = $wpdb->insert($table, [
+            'departamento_id' => $dep,
+            'nome' => $nome,
+            'slug' => $slug,
+            'ativo' => 1,
+        ]);
+        if ($insert === false) {
+            return new WP_REST_Response(['error' => 'Erro ao criar assunto: ' . $wpdb->last_error], 500);
+        }
+        return ['id' => $wpdb->insert_id];
+    }
+
+    public static function admin_update_assunto(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('assuntos');
+        $id = (int)$req['id'];
+        if ($req->get_method() === 'DELETE') {
+            $wpdb->delete($table, ['id' => $id]);
+            return ['status' => 'deleted'];
+        }
+        $data = [];
+        if ($req->get_param('nome')) {
+            $data['nome'] = sanitize_text_field($req->get_param('nome'));
+        }
+        if ($req->get_param('slug')) {
+            $data['slug'] = sanitize_title($req->get_param('slug'));
+        }
+        if ($req->get_param('ativo') !== null) {
+            $data['ativo'] = $req->get_param('ativo') ? 1 : 0;
+        }
+        if (empty($data)) {
+            return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
+        }
+        $ok = $wpdb->update($table, $data, ['id' => $id]);
+        if ($ok === false) {
+            return new WP_REST_Response(['error' => 'Erro ao atualizar assunto'], 500);
+        }
+        return ['status' => 'ok'];
+    }
+
+    public static function admin_list_status_custom(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('status_custom');
+        $dep = (int)$req->get_param('departamento_id');
+        $where = $dep ? $wpdb->prepare("WHERE departamento_id=%d", $dep) : '';
+        return $wpdb->get_results("SELECT * FROM {$table} {$where} ORDER BY ordem ASC, nome ASC");
+    }
+
+    public static function admin_create_status_custom(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('status_custom');
+        $slug = sanitize_title($req->get_param('slug'));
+        $nome = sanitize_text_field($req->get_param('nome'));
+        $dep = $req->get_param('departamento_id') ? (int)$req->get_param('departamento_id') : null;
+        if (!$slug || !$nome) {
+            return new WP_REST_Response(['error' => 'slug e nome são obrigatórios'], 400);
+        }
+        $insert = $wpdb->insert($table, [
+            'departamento_id' => $dep,
+            'slug' => $slug,
+            'nome' => $nome,
+            'cor' => sanitize_text_field($req->get_param('cor')),
+            'ordem' => (int)$req->get_param('ordem'),
+            'ativo' => 1,
+        ]);
+        if ($insert === false) {
+            return new WP_REST_Response(['error' => 'Erro ao criar status: ' . $wpdb->last_error], 500);
+        }
+        return ['id' => $wpdb->insert_id];
+    }
+
+    public static function admin_update_status_custom(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $table = ans_tickets_table('status_custom');
+        $id = (int)$req['id'];
+        if ($req->get_method() === 'DELETE') {
+            $wpdb->delete($table, ['id' => $id]);
+            return ['status' => 'deleted'];
+        }
+        $data = [];
+        if ($req->get_param('slug')) {
+            $data['slug'] = sanitize_title($req->get_param('slug'));
+        }
+        if ($req->get_param('nome')) {
+            $data['nome'] = sanitize_text_field($req->get_param('nome'));
+        }
+        if ($req->get_param('cor')) {
+            $data['cor'] = sanitize_text_field($req->get_param('cor'));
+        }
+        if ($req->get_param('ordem') !== null) {
+            $data['ordem'] = (int)$req->get_param('ordem');
+        }
+        if ($req->get_param('ativo') !== null) {
+            $data['ativo'] = $req->get_param('ativo') ? 1 : 0;
+        }
+        if ($req->get_param('departamento_id') !== null) {
+            $data['departamento_id'] = (int)$req->get_param('departamento_id');
+        }
+        if (empty($data)) {
+            return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
+        }
+        $ok = $wpdb->update($table, $data, ['id' => $id]);
+        if ($ok === false) {
+            return new WP_REST_Response(['error' => 'Erro ao atualizar status'], 500);
+        }
+        return ['status' => 'ok'];
     }
 }

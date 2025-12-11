@@ -40,6 +40,15 @@ class ANS_Tickets_Admin
             'ans-tickets-settings',
             [self::class, 'render_departamentos_page']
         );
+
+        add_submenu_page(
+            'ans-tickets',
+            'Relatórios v2',
+            'Relatórios v2',
+            'manage_options',
+            'ans-reports-v2',
+            [self::class, 'render_reports_v2']
+        );
     }
 
     public static function enqueue_admin_assets(string $hook): void
@@ -61,26 +70,28 @@ class ANS_Tickets_Admin
         ?>
         <div class="wrap">
             <h1>ANS Tickets</h1>
-            <div class="ans-admin-dashboard">
-                <div class="ans-stats">
-                    <?php
-                    global $wpdb;
-                    $table_tickets = ans_tickets_table('tickets');
-                    $novos = $wpdb->get_var("SELECT COUNT(*) FROM {$table_tickets} WHERE status='novo'");
-                    $em_atendimento = $wpdb->get_var("SELECT COUNT(*) FROM {$table_tickets} WHERE status='atendimento'");
-                    $concluidos = $wpdb->get_var("SELECT COUNT(*) FROM {$table_tickets} WHERE status='concluido'");
-                    ?>
-                    <div class="ans-stat-card">
-                        <h3>Novos</h3>
-                        <p class="ans-stat-number"><?php echo esc_html($novos); ?></p>
+            <div id="ans-admin-dashboard">
+                <div id="ans-stats-cards" class="ans-stats-cards"></div>
+                <div class="ans-chart-grid">
+                    <div class="ans-chart-card">
+                        <h3>Status</h3>
+                        <div id="ans-chart-status"></div>
                     </div>
-                    <div class="ans-stat-card">
-                        <h3>Em Atendimento</h3>
-                        <p class="ans-stat-number"><?php echo esc_html($em_atendimento); ?></p>
+                    <div class="ans-chart-card">
+                        <h3>Departamentos</h3>
+                        <div id="ans-chart-dept"></div>
                     </div>
-                    <div class="ans-stat-card">
-                        <h3>Concluídos</h3>
-                        <p class="ans-stat-number"><?php echo esc_html($concluidos); ?></p>
+                    <div class="ans-chart-card">
+                        <h3>Assuntos</h3>
+                        <div id="ans-chart-subjects"></div>
+                    </div>
+                    <div class="ans-chart-card">
+                        <h3>SLA / Resolução</h3>
+                        <div id="ans-chart-sla"></div>
+                    </div>
+                    <div class="ans-chart-card">
+                        <h3>Top Atendentes</h3>
+                        <div id="ans-chart-agents"></div>
                     </div>
                 </div>
             </div>
@@ -225,6 +236,34 @@ class ANS_Tickets_Admin
                     </form>
                 </div>
             </div>
+
+            <hr>
+            <h2>Assuntos por Departamento</h2>
+            <div class="ans-config-grid">
+                <div class="ans-config-card">
+                    <label>Departamento</label>
+                    <select id="ans-assunto-dep"></select>
+                    <div class="ans-config-actions">
+                        <input type="text" id="ans-assunto-nome" class="regular-text" placeholder="Novo assunto">
+                        <input type="text" id="ans-assunto-slug" class="regular-text" placeholder="slug-opcional">
+                        <button id="ans-assunto-save" class="button button-primary">Salvar</button>
+                    </div>
+                    <ul id="ans-assunto-list"></ul>
+                </div>
+                <div class="ans-config-card">
+                    <h2>Status custom por departamento</h2>
+                    <label>Departamento</label>
+                    <select id="ans-status-dep"></select>
+                    <div class="ans-config-actions">
+                        <input type="text" id="ans-status-nome" class="regular-text" placeholder="Nome">
+                        <input type="text" id="ans-status-slug" class="regular-text" placeholder="slug">
+                        <input type="color" id="ans-status-cor" value="#a60069">
+                        <input type="number" id="ans-status-ordem" class="small-text" placeholder="Ordem">
+                        <button id="ans-status-save" class="button button-primary">Salvar</button>
+                    </div>
+                    <ul id="ans-status-list"></ul>
+                </div>
+            </div>
         </div>
         <style>
             .ans-admin-dashboard { margin-top: 20px; }
@@ -256,6 +295,8 @@ class ANS_Tickets_Admin
         jQuery(document).ready(function($) {
             loadDepartamentos();
             loadSettings();
+            initAssuntos();
+            initStatus();
             
             $('#ans-new-departamento').on('click', function() {
                 $('#ans-modal-title').text('Novo Departamento');
@@ -446,6 +487,109 @@ class ANS_Tickets_Admin
                     }
                 });
             });
+
+            function initAssuntos() {
+                loadAssuntoDeps();
+                $('#ans-assunto-save').on('click', function(){
+                    const dep = parseInt($('#ans-assunto-dep').val(),10);
+                    const nome = $('#ans-assunto-nome').val();
+                    const slug = $('#ans-assunto-slug').val();
+                    if(!dep || !nome){ alert('Selecione departamento e informe o nome'); return; }
+                    $.ajax({
+                        url: ANS_TICKETS_ADMIN.api + '/admin/assuntos',
+                        method: 'POST',
+                        headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                        data: JSON.stringify({departamento_id: dep, nome, slug}),
+                        contentType: 'application/json',
+                        success: function(){ $('#ans-assunto-nome').val(''); $('#ans-assunto-slug').val(''); loadAssuntos(dep); },
+                        error: function(xhr){ alert(xhr.responseJSON?.error || 'Erro'); }
+                    });
+                });
+                $('#ans-assunto-dep').on('change', function(){
+                    loadAssuntos(parseInt(this.value,10));
+                });
+            }
+
+            function loadAssuntoDeps(){
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos',
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    success: function(deps){
+                        const opts = deps.map(d=>'<option value="'+d.id+'">'+d.nome+'</option>').join('');
+                        $('#ans-assunto-dep, #ans-status-dep').html('<option value="">Selecione</option>'+opts);
+                    }
+                });
+            }
+
+            function loadAssuntos(depId){
+                if(!depId){ $('#ans-assunto-list').html('<li>Selecione um departamento.</li>'); return; }
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/assuntos?departamento_id='+depId,
+                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
+                    success: function(rows){
+                        if(!rows.length){ $('#ans-assunto-list').html('<li>Nenhum assunto.</li>'); return; }
+                        const html = rows.map(r=>'<li data-id="'+r.id+'">'+r.nome+' <button class="button-link ans-del-assunto" data-id="'+r.id+'">Excluir</button></li>').join('');
+                        $('#ans-assunto-list').html(html);
+                    }
+                });
+            }
+
+            $(document).on('click','.ans-del-assunto', function(){
+                const id = $(this).data('id');
+                if(!confirm('Excluir assunto?')) return;
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/assuntos/'+id,
+                    method:'DELETE',
+                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
+                    success:function(){ loadAssuntos(parseInt($('#ans-assunto-dep').val(),10)); }
+                });
+            });
+
+            function initStatus(){
+                $('#ans-status-save').on('click', function(){
+                    const dep = parseInt($('#ans-status-dep').val(),10);
+                    const nome = $('#ans-status-nome').val();
+                    const slug = $('#ans-status-slug').val();
+                    const cor = $('#ans-status-cor').val();
+                    const ordem = parseInt($('#ans-status-ordem').val(),10) || 0;
+                    if(!nome || !slug){ alert('Informe nome e slug'); return; }
+                    $.ajax({
+                        url: ANS_TICKETS_ADMIN.api + '/admin/status-custom',
+                        method:'POST',
+                        headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
+                        data: JSON.stringify({departamento_id: dep||null, nome, slug, cor, ordem}),
+                        contentType:'application/json',
+                        success:function(){ $('#ans-status-nome').val(''); $('#ans-status-slug').val(''); loadStatus(dep); },
+                        error:function(xhr){ alert(xhr.responseJSON?.error||'Erro'); }
+                    });
+                });
+                $('#ans-status-dep').on('change', function(){
+                    loadStatus(parseInt(this.value,10));
+                });
+            }
+
+            function loadStatus(depId){
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/status-custom' + (depId ? ('?departamento_id='+depId) : ''),
+                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
+                    success:function(rows){
+                        if(!rows.length){ $('#ans-status-list').html('<li>Nenhum status custom.</li>'); return; }
+                        const html = rows.map(r=>'<li data-id="'+r.id+'"><span style="display:inline-block;width:12px;height:12px;background:'+ (r.cor||'#ccc') +';border-radius:50%;margin-right:6px"></span>'+r.nome+' ('+r.slug+') <button class="button-link ans-del-status" data-id="'+r.id+'">Excluir</button></li>').join('');
+                        $('#ans-status-list').html(html);
+                    }
+                });
+            }
+
+            $(document).on('click','.ans-del-status', function(){
+                const id = $(this).data('id');
+                if(!confirm('Excluir status?')) return;
+                $.ajax({
+                    url: ANS_TICKETS_ADMIN.api + '/admin/status-custom/'+id,
+                    method:'DELETE',
+                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
+                    success:function(){ loadStatus(parseInt($('#ans-status-dep').val(),10)); }
+                });
+            });
         });
         </script>
         <?php
@@ -486,6 +630,53 @@ class ANS_Tickets_Admin
                 </table>
                 <?php submit_button(); ?>
             </form>
+        </div>
+        <?php
+    }
+
+    public static function render_reports_v2(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso negado');
+        }
+        wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', [], '4.4.0', true);
+        wp_add_inline_script('chartjs', 'window.ANS_TICKETS_REPORTS = { api: "' . esc_js(get_rest_url(null, ANS_TICKETS_NAMESPACE . '/admin/reports/v2')) . '", nonce: "' . wp_create_nonce('wp_rest') . '" };');
+        ?>
+        <div class="wrap">
+            <h1>Relatórios Avançados</h1>
+            <div id="ans-reports" class="ans-reports-grid">
+                <canvas id="chart-first-dept"></canvas>
+                <canvas id="chart-first-agent"></canvas>
+                <canvas id="chart-sla"></canvas>
+                <canvas id="chart-assunto"></canvas>
+                <canvas id="chart-hora"></canvas>
+                <canvas id="chart-heatmap"></canvas>
+            </div>
+            <script>
+            (function(){
+                const cfg = window.ANS_TICKETS_REPORTS;
+                async function fetchData(){
+                    const res = await fetch(cfg.api,{headers:{'X-WP-Nonce':cfg.nonce}});
+                    const json = await res.json();
+                    render(json);
+                }
+                function render(data){
+                    const ctx1 = document.getElementById('chart-first-dept');
+                    if(ctx1){ new Chart(ctx1,{type:'bar',data:{labels:(data.first_response_departamento||[]).map(r=>r.departamento||'N/A'),datasets:[{label:'Horas',data:(data.first_response_departamento||[]).map(r=>parseFloat(r.horas||0)),backgroundColor:'#7a003c'}]}}); }
+                    const ctx2 = document.getElementById('chart-first-agent');
+                    if(ctx2){ new Chart(ctx2,{type:'bar',data:{labels:(data.first_response_agente||[]).map(r=>r.agente||'N/A'),datasets:[{label:'Horas',data:(data.first_response_agente||[]).map(r=>parseFloat(r.horas||0)),backgroundColor:'#0047ff'}]}}); }
+                    const ctx3 = document.getElementById('chart-sla');
+                    if(ctx3){ new Chart(ctx3,{type:'pie',data:{labels:['Cumprido','Estourado'],datasets:[{data:[data.sla?.cumprido||0,data.sla?.estourado||0],backgroundColor:['#3ac15b','#e84855']} ]}}); }
+                    const ctx4 = document.getElementById('chart-assunto');
+                    if(ctx4){ new Chart(ctx4,{type:'bar',data:{labels:(data.assunto||[]).map(r=>r.assunto||'N/A'),datasets:[{label:'Tickets',data:(data.assunto||[]).map(r=>parseInt(r.total||0,10)),backgroundColor:'#ffb000'}]}}); }
+                    const ctx5 = document.getElementById('chart-hora');
+                    if(ctx5){ new Chart(ctx5,{type:'line',data:{labels:(data.por_hora||[]).map(r=>r.hora),datasets:[{label:'Tickets',data:(data.por_hora||[]).map(r=>parseInt(r.total||0,10)),borderColor:'#7a003c',backgroundColor:'#f7ddee'}]}}); }
+                    const ctx6 = document.getElementById('chart-heatmap');
+                    if(ctx6){ new Chart(ctx6,{type:'bar',data:{labels:(data.heatmap||[]).map(r=>`D${r.dia}-H${r.hora}`),datasets:[{label:'Tickets',data:(data.heatmap||[]).map(r=>parseInt(r.total||0,10)),backgroundColor:'#60ebff'}]}}); }
+                }
+                fetchData();
+            })();
+            </script>
         </div>
         <?php
     }

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.4.3
+ * Version: 0.6.2
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.4.3');
+define('ANS_TICKETS_VERSION', '0.6.2');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -19,16 +19,36 @@ define('ANS_TICKETS_NAMESPACE', 'ans-tickets/v1');
 
 define('ANS_TICKETS_OPTION', 'ans_tickets_settings');
 
+spl_autoload_register(function ($class) {
+    if (strpos($class, 'ANS\\Tickets\\') !== 0) {
+        return;
+    }
+    $relative = str_replace('ANS\\Tickets\\', '', $class);
+    $relativePath = str_replace('\\', '/', $relative);
+    $file = ANS_TICKETS_PATH . strtolower($relativePath) . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
 require_once ANS_TICKETS_PATH . 'inc/class-installer.php';
 require_once ANS_TICKETS_PATH . 'inc/class-routes.php';
 require_once ANS_TICKETS_PATH . 'inc/class-admin.php';
+require_once ANS_TICKETS_PATH . 'inc/class-cron.php';
 require_once ANS_TICKETS_PATH . 'inc/helpers.php';
 
 register_activation_hook(__FILE__, ['ANS_Tickets_Installer', 'activate']);
+register_deactivation_hook(__FILE__, function () {
+    $timestamp = wp_next_scheduled('ans_tickets_sla_cron');
+    if ($timestamp) {
+        wp_unschedule_event($timestamp, 'ans_tickets_sla_cron');
+    }
+});
 add_action('plugins_loaded', ['ANS_Tickets_Installer', 'maybe_update']);
 
 add_action('rest_api_init', ['ANS_Tickets_Routes', 'register']);
 ANS_Tickets_Admin::init();
+ANS_Tickets_Cron::init();
 
 // Shortcode: formulário de abertura
 add_shortcode('ans_ticket_form', function () {
@@ -41,6 +61,7 @@ add_shortcode('ans_ticket_form', function () {
     ?>
     <div id="ans-ticket-form" class="ans-ticket-card">
         <h3>Novo Atendimento</h3>
+        <p class="ans-section-subtitle">Abra um protocolo para falar com nossa equipe.</p>
         <form>
             <div class="ans-grid">
                 <label class="full">
@@ -66,8 +87,13 @@ add_shortcode('ans_ticket_form', function () {
                 <label class="half">Documento (CPF/CNPJ)
                     <input name="documento" required>
                 </label>
-                <label class="half">Data de Nascimento
-                    <input name="data_nascimento" type="date" required>
+                <label class="half cliente-uni" style="display:none">Data de Nascimento
+                    <input name="data_nascimento" type="date">
+                </label>
+                <label class="full">Departamento que deseja falar
+                    <select name="departamento_id" id="ans-departamento" required>
+                        <option value="">Selecione um departamento</option>
+                    </select>
                 </label>
                 <label class="full">Assunto
                     <select name="assunto" id="ans-assunto" required>
@@ -76,9 +102,6 @@ add_shortcode('ans_ticket_form', function () {
                 </label>
                 <label class="full field-ouvidoria" style="display:none">Protocolo anterior
                     <input name="ticket_origem" id="ans-ticket-origem">
-                </label>
-                <label class="full">Descrição
-                    <textarea name="descricao" required></textarea>
                 </label>
                 <div id="ans-ouvidoria-notice" class="ans-ouvidoria-notice" style="display:none"></div>
                 <div class="assist-block" style="display:none">
@@ -95,12 +118,46 @@ add_shortcode('ans_ticket_form', function () {
                         <input name="numero_guia">
                     </label>
                 </div>
+                <label class="full">Descreva seu atendimento
+                    <textarea name="descricao" required></textarea>
+                </label>
             </div>
             <div class="ans-actions">
-                <button type="submit" class="ans-btn">Enviar</button>
+                <button type="submit" class="ans-btn">Enviar Chamado</button>
             </div>
         </form>
         <div class="ans-ticket-result" style="display:none"></div>
+    </div>
+    <?php
+    return ob_get_clean();
+});
+
+// Shortcode: kanban de atendimento
+add_shortcode('ans_ticket_kanban', function () {
+    if (!is_user_logged_in() || !ans_tickets_can_answer()) {
+        return '<div class="ans-ticket-card"><p>Acesso restrito. Faça login como atendente.</p></div>';
+    }
+    wp_enqueue_style('ans-tickets-kanban', ANS_TICKETS_URL . 'assets/kanban.css', [], ANS_TICKETS_VERSION);
+    wp_enqueue_script('ans-tickets-kanban', ANS_TICKETS_URL . 'assets/kanban.js', [], ANS_TICKETS_VERSION, true);
+    wp_localize_script('ans-tickets-kanban', 'ANS_TICKETS_KANBAN', [
+        'api' => get_rest_url(null, ANS_TICKETS_NAMESPACE),
+        'nonce' => wp_create_nonce('wp_rest'),
+        'status' => ans_tickets_statuses(),
+        'prioridades' => ans_tickets_default_prioridades(),
+    ]);
+    ob_start();
+    ?>
+    <div id="ans-kanban" class="ans-kanban">
+        <div class="kanban-filters">
+            <select id="kanban-filter-status"><option value="">Status</option></select>
+            <select id="kanban-filter-dep"><option value="">Departamento</option></select>
+            <select id="kanban-filter-resp"><option value="">Responsável</option></select>
+            <select id="kanban-filter-pri"><option value="">Prioridade</option><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option></select>
+            <input type="text" id="kanban-filter-proto" placeholder="Protocolo">
+            <input type="text" id="kanban-filter-doc" placeholder="Documento">
+            <button id="kanban-apply" class="ans-btn">Filtrar</button>
+        </div>
+        <div id="kanban-board" class="kanban-board" aria-live="polite"></div>
     </div>
     <?php
     return ob_get_clean();
@@ -116,7 +173,8 @@ add_shortcode('ans_ticket_track', function () {
     ob_start();
     ?>
     <div id="ans-ticket-track" class="ans-ticket-card">
-        <h3>Acompanhar Protocolo</h3>
+        <h3>Consultar Protocolo</h3>
+        <p class="ans-section-subtitle">Se já tem o número, consulte aqui.</p>
         <form class="track-form">
             <label>Protocolo<input name="protocolo"></label>
             <label>Documento (CPF/CNPJ)<input name="documento"></label>
@@ -125,12 +183,12 @@ add_shortcode('ans_ticket_track', function () {
         <div class="ans-ticket-details" style="display:none"></div>
     </div>
     <div id="ans-ticket-recover" class="ans-ticket-card" style="margin-top: 20px;">
-        <h3>Recuperar Meus Chamados</h3>
-        <p>Esqueceu o protocolo? Informe seu CPF e data de nascimento para recuperar todos os seus chamados.</p>
+        <h3>Esqueceu o protocolo?</h3>
+        <p class="ans-section-subtitle">Informe CPF e data de nascimento para listar todos os seus chamados.</p>
         <form class="recover-form">
             <label>CPF<input name="documento" required></label>
             <label>Data de Nascimento<input name="data_nascimento" type="date" required></label>
-            <button type="submit">Recuperar Chamados</button>
+            <button type="submit">Recuperar meus chamados</button>
         </form>
         <div class="ans-ticket-recover-results" style="display:none"></div>
     </div>
@@ -202,36 +260,91 @@ add_shortcode('ans_ticket_dashboard', function () {
         'api' => get_rest_url(null, ANS_TICKETS_NAMESPACE),
         'nonce' => wp_create_nonce('wp_rest'),
         'user' => wp_get_current_user()->display_name,
+        'user_id' => get_current_user_id(),
     ]);
     ob_start();
     ?>
     <div id="ans-dashboard" class="ans-dashboard">
         <header class="ans-dash-header">
-            <div>
+            <div class="ans-head-left">
+                <p class="ans-kicker">Área do atendente</p>
                 <h2>Controle de Chamados</h2>
-                <p>Atendente: <?php echo esc_html(wp_get_current_user()->display_name); ?></p>
+                <p class="ans-agent-name">Atendente: <?php echo esc_html(wp_get_current_user()->display_name); ?></p>
             </div>
-            <div class="ans-dash-filters">
-                <select id="filter-status">
-                    <option value="">Status</option>
-                    <option value="aberto">Aberto</option>
-                    <option value="em_triagem">Em Triagem</option>
-                    <option value="aguardando_informacoes_solicitante">Aguardando Informações do Solicitante</option>
-                    <option value="em_analise">Em Análise</option>
-                    <option value="em_execucao">Em Atendimento / Execução</option>
-                    <option value="aguardando_terceiros">Aguardando Terceiros</option>
-                    <option value="aguardando_aprovacao">Aguardando Aprovação</option>
-                    <option value="solucao_proposta">Solução Proposta</option>
-                    <option value="resolvido">Resolvido</option>
-                    <option value="fechado">Fechado</option>
-                </select>
-                <input type="text" id="filter-protocolo" placeholder="Protocolo">
-                <input type="text" id="filter-documento" placeholder="Documento">
-                <button id="apply-filters">Filtrar</button>
+            <div class="ans-head-meta">
+                <div class="ans-pill">Sessão ativa</div>
             </div>
         </header>
+        <section class="ans-filter-panel">
+            <div class="ans-dash-filters">
+                <div class="ans-filter-grid ans-filter-grid-4">
+                    <label class="ans-field">
+                        <span>Status</span>
+                        <select id="filter-status">
+                            <option value="">Todos</option>
+                            <option value="aberto">Aberto</option>
+                            <option value="em_triagem">Em Triagem</option>
+                            <option value="aguardando_informacoes_solicitante">Aguardando Informações do Solicitante</option>
+                            <option value="em_analise">Em Análise</option>
+                            <option value="em_execucao">Em Atendimento / Execução</option>
+                            <option value="aguardando_terceiros">Aguardando Terceiros</option>
+                            <option value="aguardando_aprovacao">Aguardando Aprovação</option>
+                            <option value="solucao_proposta">Solução Proposta</option>
+                            <option value="resolvido">Resolvido</option>
+                            <option value="fechado">Fechado</option>
+                        </select>
+                    </label>
+                    <label class="ans-field">
+                        <span>Departamento</span>
+                        <select id="filter-departamento">
+                            <option value="">Todos</option>
+                        </select>
+                    </label>
+                    <label class="ans-field">
+                        <span>Responsável</span>
+                        <select id="filter-responsavel">
+                            <option value="">Todos</option>
+                        </select>
+                    </label>
+                    <label class="ans-field">
+                        <span>Prioridade</span>
+                        <select id="filter-prioridade">
+                            <option value="">Todas</option>
+                            <option value="alta">Alta</option>
+                            <option value="media">Média</option>
+                            <option value="baixa">Baixa</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div class="ans-filter-chips">
+                <div>
+                    <div class="ans-chip-label">Filtros ativos</div>
+                    <div class="ans-chip-row" id="ans-active-chips"></div>
+                </div>
+                <div>
+                    <div class="ans-chip-label">Filtros salvos</div>
+                    <div class="ans-chip-row" id="ans-saved-chips"></div>
+                </div>
+            </div>
+        </section>
         <main class="ans-dash-main">
             <section class="ans-dash-list">
+                <div class="ans-side-filter">
+                    <h4>Filtrar protocolos</h4>
+                    <label class="ans-field">
+                        <span>Protocolo</span>
+                        <input type="text" id="filter-protocolo" placeholder="Ex: 3679662025">
+                    </label>
+                    <label class="ans-field">
+                        <span>Documento</span>
+                        <input type="text" id="filter-documento" placeholder="CPF/CNPJ">
+                    </label>
+                    <div class="ans-filter-actions">
+                        <button id="apply-filters" class="btn btn-primary">Filtrar</button>
+                        <button id="save-filters" type="button" class="btn btn-secondary">Salvar filtro</button>
+                    </div>
+                </div>
                 <ul id="ticket-list"></ul>
             </section>
             <section class="ans-dash-detail" id="ticket-detail">

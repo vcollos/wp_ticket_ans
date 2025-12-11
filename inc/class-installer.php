@@ -113,6 +113,76 @@ CREATE TABLE {$prefix}departamento_users (
     KEY departamento_id (departamento_id),
     KEY user_id (user_id)
 ) $charset;
+
+CREATE TABLE {$prefix}respostas_rapidas (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    titulo VARCHAR(120) NOT NULL,
+    conteudo TEXT NOT NULL,
+    escopo VARCHAR(20) NOT NULL,
+    departamento_id BIGINT UNSIGNED,
+    user_id BIGINT UNSIGNED,
+    status_slug VARCHAR(60),
+    assunto_id BIGINT UNSIGNED,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY escopo (escopo),
+    KEY departamento_id (departamento_id),
+    KEY user_id (user_id),
+    KEY status_slug (status_slug),
+    KEY assunto_id (assunto_id)
+) $charset;
+
+CREATE TABLE {$prefix}filtros_salvos (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    nome VARCHAR(120) NOT NULL,
+    filtros LONGTEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY user_id (user_id)
+) $charset;
+
+CREATE TABLE {$prefix}assuntos (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    departamento_id BIGINT UNSIGNED NOT NULL,
+    nome VARCHAR(120) NOT NULL,
+    slug VARCHAR(120) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY dept_slug (departamento_id, slug)
+) $charset;
+
+CREATE TABLE {$prefix}status_custom (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    departamento_id BIGINT UNSIGNED,
+    slug VARCHAR(80) NOT NULL,
+    nome VARCHAR(120) NOT NULL,
+    cor VARCHAR(20),
+    ordem INT DEFAULT 0,
+    ativo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY slug_dept (slug, departamento_id)
+) $charset;
+
+CREATE TABLE {$prefix}respostas_rapidas_links (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    resposta_id BIGINT UNSIGNED NOT NULL,
+    departamento_id BIGINT UNSIGNED,
+    assunto_id BIGINT UNSIGNED,
+    status_slug VARCHAR(80),
+    PRIMARY KEY (id),
+    KEY resposta_id (resposta_id),
+    KEY departamento_id (departamento_id),
+    KEY assunto_id (assunto_id),
+    KEY status_slug (status_slug)
+) $charset;
 ";
 
         dbDelta($tables);
@@ -164,6 +234,9 @@ CREATE TABLE {$prefix}departamento_users (
         // Criar páginas SAC e Controle de Chamados se não existirem
         self::maybe_create_page('sac', 'SAC', "[ans_ticket_form]\n[ans_ticket_track]");
         self::maybe_create_page('controle-de-chamados', 'Controle de Chamados', "[ans_ticket_dashboard]");
+        if (!wp_next_scheduled('ans_tickets_sla_cron')) {
+            wp_schedule_event(time(), 'ans_tickets_5min', 'ans_tickets_sla_cron');
+        }
     }
 
     private static function maybe_create_page(string $slug, string $title, string $content): void
@@ -222,5 +295,91 @@ CREATE TABLE {$prefix}departamento_users (
             KEY user_id (user_id)
         ) $charset;";
         dbDelta($table_users);
+
+        // Garantir coluna responsavel_id em tickets
+        $cols_tickets = $wpdb->get_col("SHOW COLUMNS FROM {$prefix}tickets");
+        if (!in_array('responsavel_id', $cols_tickets)) {
+            $wpdb->query("ALTER TABLE {$prefix}tickets ADD COLUMN responsavel_id BIGINT UNSIGNED NULL AFTER departamento_id");
+        }
+
+        // Tabela respostas rápidas
+        $table_quick = "CREATE TABLE IF NOT EXISTS {$prefix}respostas_rapidas (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            titulo VARCHAR(120) NOT NULL,
+            conteudo TEXT NOT NULL,
+            escopo VARCHAR(20) NOT NULL,
+            departamento_id BIGINT UNSIGNED,
+            user_id BIGINT UNSIGNED,
+            status_slug VARCHAR(60),
+            assunto_id BIGINT UNSIGNED,
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY escopo (escopo),
+            KEY departamento_id (departamento_id),
+            KEY user_id (user_id),
+            KEY status_slug (status_slug),
+            KEY assunto_id (assunto_id)
+        ) $charset;";
+        dbDelta($table_quick);
+
+        // Tabela filtros salvos
+        $table_filters = "CREATE TABLE IF NOT EXISTS {$prefix}filtros_salvos (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            user_id BIGINT UNSIGNED NOT NULL,
+            nome VARCHAR(120) NOT NULL,
+            filtros LONGTEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY user_id (user_id)
+        ) $charset;";
+        dbDelta($table_filters);
+
+        // Tabela assuntos
+        $table_assuntos = "CREATE TABLE IF NOT EXISTS {$prefix}assuntos (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            departamento_id BIGINT UNSIGNED NOT NULL,
+            nome VARCHAR(120) NOT NULL,
+            slug VARCHAR(120) NOT NULL,
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY dept_slug (departamento_id, slug)
+        ) $charset;";
+        dbDelta($table_assuntos);
+
+        // Tabela status custom
+        $table_status = "CREATE TABLE IF NOT EXISTS {$prefix}status_custom (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            departamento_id BIGINT UNSIGNED,
+            slug VARCHAR(80) NOT NULL,
+            nome VARCHAR(120) NOT NULL,
+            cor VARCHAR(20),
+            ordem INT DEFAULT 0,
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug_dept (slug, departamento_id)
+        ) $charset;";
+        dbDelta($table_status);
+
+        // Tabela links de respostas rápidas
+        $table_links = "CREATE TABLE IF NOT EXISTS {$prefix}respostas_rapidas_links (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            resposta_id BIGINT UNSIGNED NOT NULL,
+            departamento_id BIGINT UNSIGNED,
+            assunto_id BIGINT UNSIGNED,
+            status_slug VARCHAR(80),
+            PRIMARY KEY (id),
+            KEY resposta_id (resposta_id),
+            KEY departamento_id (departamento_id),
+            KEY assunto_id (assunto_id),
+            KEY status_slug (status_slug)
+        ) $charset;";
+        dbDelta($table_links);
     }
 }

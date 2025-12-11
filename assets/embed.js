@@ -11,6 +11,7 @@
     solucao_proposta: 'Solução Proposta',
     resolvido: 'Resolvido',
     fechado: 'Fechado',
+    aguardando_acao: 'Aguardando Ação',
     // legados
     novo: 'Aberto (legado)',
     atendimento: 'Em Atendimento (legado)',
@@ -43,18 +44,28 @@
     try{
       const res = await fetch(apiBase+'/departamentos');
       const depts = await res.json();
-      const select = document.getElementById('ans-assunto');
-      if(select){
-        select.innerHTML = '<option value="">Selecione um assunto</option>';
-        depts.forEach(d=>{
-          const option = document.createElement('option');
-          option.value = d.slug;
-          option.textContent = d.nome;
-          select.appendChild(option);
-        });
+      const depSelect = document.getElementById('ans-departamento');
+      if(depSelect){
+        depSelect.innerHTML = '<option value="">Selecione um departamento</option>' + depts.map(d=>`<option value="${d.id}" data-slug="${d.slug}">${d.nome}</option>`).join('');
       }
     }catch(err){
       console.error('Erro ao carregar departamentos:', err);
+    }
+  }
+
+  async function loadAssuntosByDep(depId){
+    const assuntoSelect = document.getElementById('ans-assunto');
+    if(!assuntoSelect){ return; }
+    if(!depId){
+      assuntoSelect.innerHTML = '<option value="">Selecione um assunto</option>';
+      return;
+    }
+    try{
+      const res = await fetch(`${apiBase}/departamentos/${depId}/assuntos`);
+      const data = await res.json();
+      assuntoSelect.innerHTML = '<option value="">Selecione um assunto</option>' + data.map(a=>`<option value="${a.slug}">${a.nome}</option>`).join('');
+    }catch(e){
+      assuntoSelect.innerHTML = '<option value="">Selecione um assunto</option>';
     }
   }
 
@@ -63,6 +74,20 @@
     if(!wrap) return;
     const form = wrap.querySelector('form');
     const result = wrap.querySelector('.ans-ticket-result');
+    const clienteField = document.querySelector('#ans-ticket-form .cliente-uni');
+    const clienteSelect = document.getElementById('ans-cliente-uniodonto');
+    if(clienteSelect && clienteField){
+      clienteSelect.addEventListener('change', ()=>{
+        const isCliente = clienteSelect.value === 'true';
+        clienteField.style.display = isCliente ? '' : 'none';
+        const input = clienteField.querySelector('input');
+        if(input){ input.required = isCliente; }
+      });
+    }
+    const depSelect = document.getElementById('ans-departamento');
+    if(depSelect){
+      depSelect.addEventListener('change', ()=>loadAssuntosByDep(depSelect.value));
+    }
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       result.style.display='none';
@@ -86,12 +111,13 @@
   function toggleAssistFields(){
     const select = document.getElementById('ans-assunto');
     const block = document.querySelector('#ans-ticket-form .assist-block');
+    const grid = document.querySelector('#ans-ticket-form .ans-grid');
     const ouvidoriaField = document.querySelector('#ans-ticket-form .field-ouvidoria');
     const ouvidoriaInput = document.getElementById('ans-ticket-origem');
     const notice = document.getElementById('ans-ouvidoria-notice');
     if (!select || !block) return;
     const isOuvidoria = select.value === 'ouvidoria';
-    const isAssist = select.value === 'assistencial';
+    const isAssist = select.value === 'assistencial' || select.value === 'atendimento';
     const assistFields = block.querySelectorAll('.field-assistencial');
 
     if (ouvidoriaField) {
@@ -109,9 +135,8 @@
       noticeBox = document.createElement('div');
       noticeBox.id = 'ans-ouvidoria-notice';
       noticeBox.className = 'ans-ouvidoria-notice';
-      const desc = document.querySelector('#ans-ticket-form textarea[name=\"descricao\"]');
-      if (desc && desc.parentNode) {
-        desc.parentNode.insertAdjacentElement('afterend', noticeBox);
+      if (grid) {
+        grid.appendChild(noticeBox);
       }
     }
     if (isOuvidoria) {
@@ -149,31 +174,56 @@
   function renderTicket(el, ticket, token){
     if(token){ tokens[ticket.protocolo] = token; }
     let html = '<div class="ans-ticket-head">';
-    html += '<div><h4>Protocolo '+ticket.protocolo+'</h4>';
-    html += '<div class="ans-ticket-meta">'+(ticket.departamento_nome||'')+' • '+(ticket.created_at||'')+'</div>';
-    html += '</div><div>'+statusBadge(ticket.status)+'</div></div>';
+    html += '<div><h4>[#'+ticket.protocolo+'] '+(ticket.assunto||'')+'</h4>';
+    html += '<div class="ans-ticket-meta">'+statusBadge(ticket.status)+' • Criado em '+(ticket.created_at||'')+' • '+(ticket.departamento_nome||'')+'</div>';
+    html += '</div></div>';
     html += '<div class="ans-ticket-desc">'+ticket.descricao+'</div>';
     html += '<div class="ans-thread-wrap">';
     html += '<div class="ans-thread-title">Histórico</div>';
     html += '<ul class="ans-thread">';
     const interactions = ticket.interacoes||[];
+    const anexos = (ticket.anexos||[]).sort((a,b)=>{
+      const da = new Date((a.created_at||'').replace(' ','T'));
+      const db = new Date((b.created_at||'').replace(' ','T'));
+      return da - db;
+    });
+    const map = {};
+    anexos.forEach(a=>{
+      const key = a.interacao_id || 'ticket';
+      if(!map[key]) map[key]=[];
+      map[key].push(a);
+    });
+    let lastDate = '';
     if(!interactions.length){
       html += '<li class="ans-thread-item"><div class="ans-thread-body">Sem interações ainda.</div></li>';
     }
     interactions.forEach(i=>{
+      const day = (i.created_at||'').split(' ')[0];
+      if(day && day!==lastDate){
+        html += '<li class="ans-thread-item ans-thread-sep">'+day+'</li>';
+        lastDate = day;
+      }
       const whoClass = i.autor_tipo==='cliente' ? 'beneficiario' : 'atendente';
       const whoLabel = i.autor_tipo==='cliente' ? 'Beneficiário' : 'Atendente';
+      const attach = map[i.id]||[];
       html += '<li class="ans-thread-item">';
       html += '<div class="ans-thread-top"><span class="ans-badge ans-pill-'+whoClass+'">'+whoLabel+'</span><span class="ans-thread-date">'+i.created_at+'</span></div>';
       html += '<div class="ans-thread-body">'+i.mensagem+'</div>';
+      if(attach.length){
+        html += '<div class="ans-thread-attach">'+attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'} (${(a.tamanho_bytes/1024/1024).toFixed(2)}MB)</a>`).join('<br>')+'</div>';
+      }
       html += '</li>';
     });
+    const ticketAttach = map['ticket']||[];
+    if(ticketAttach.length){
+      html += '<li class="ans-thread-item"><div class="ans-thread-body">'+ticketAttach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'} (${(a.tamanho_bytes/1024/1024).toFixed(2)}MB)</a>`).join('<br>')+'</div></li>';
+    }
     html += '</ul></div>';
     html += '<div class="ans-reply-box">';
-    html += '<label>Responder ao chamado</label>';
-    html += '<textarea class="ans-reply-text" data-protocolo="'+ticket.protocolo+'" placeholder="Digite sua resposta"></textarea>';
-    html += '<button type="button" class="ans-btn ans-send-reply" data-protocolo="'+ticket.protocolo+'">Enviar resposta</button>';
-    html += '<p class="ans-reply-hint">Sua mensagem ficará visível para a equipe de atendimento.</p>';
+    html += '<label>Enviar nova mensagem</label>';
+    html += '<textarea class="ans-reply-text" data-protocolo="'+ticket.protocolo+'" placeholder="Digite sua resposta..."></textarea>';
+    html += '<div class="ans-actions" style="margin-top:8px;text-align:left;"><button type="button" class="ans-btn ans-send-reply" data-protocolo="'+ticket.protocolo+'">Enviar resposta</button></div>';
+    html += '<p class="ans-reply-hint">Você receberá a resposta aqui e no e-mail informado.</p>';
     html += '</div>';
     el.innerHTML = html;
     el.style.display='block';
@@ -280,44 +330,7 @@
   };
 
   function setupTabs(){
-    const formCard = document.getElementById('ans-ticket-form');
-    const trackCard = document.getElementById('ans-ticket-track');
-    if(!formCard || !trackCard || formCard.dataset.tabsInitialized){
-      return;
-    }
-    const recoverCard = document.getElementById('ans-ticket-recover');
-    const parent = formCard.parentNode;
-    const nav = document.createElement('div');
-    nav.className = 'ans-tabs-nav';
-    nav.innerHTML = '<button class="ans-tab-btn active" data-target="abrir">Abrir chamado</button><button class="ans-tab-btn" data-target="meus">Meus chamados</button>';
-    parent.insertBefore(nav, formCard);
-
-    const openGroup = [formCard];
-    const trackGroup = [trackCard];
-    if(recoverCard){ trackGroup.push(recoverCard); }
-
-    openGroup.forEach(el=>{ el.classList.add('ans-tab-panel', 'active'); });
-    trackGroup.forEach(el=>{ el.classList.add('ans-tab-panel'); el.style.display='none'; });
-
-    function showTab(target){
-      if(target==='abrir'){
-        openGroup.forEach(el=>{ el.style.display=''; el.classList.add('active'); });
-        trackGroup.forEach(el=>{ el.style.display='none'; el.classList.remove('active'); });
-      }else{
-        openGroup.forEach(el=>{ el.style.display='none'; el.classList.remove('active'); });
-        trackGroup.forEach(el=>{ el.style.display=''; el.classList.add('active'); });
-      }
-    }
-
-    nav.addEventListener('click', (ev)=>{
-      const btn = ev.target.closest('.ans-tab-btn');
-      if(!btn) return;
-      nav.querySelectorAll('.ans-tab-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      showTab(btn.dataset.target);
-    });
-
-    formCard.dataset.tabsInitialized = '1';
+    // Tabs desativadas: telas separadas (Novo Chamado / Meus Chamados).
   }
 
   document.addEventListener('DOMContentLoaded', ()=>{
@@ -330,6 +343,10 @@
     const select = document.getElementById('ans-assunto');
     if (select) {
         select.addEventListener('change', toggleAssistFields);
+    }
+    const depSelect = document.getElementById('ans-departamento');
+    if(depSelect){
+        depSelect.addEventListener('change', toggleAssistFields);
     }
   });
 })();
