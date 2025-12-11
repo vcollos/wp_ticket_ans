@@ -139,316 +139,97 @@ class ANS_Tickets_Admin
 
     public static function render_departamentos_page(): void
     {
+        global $wpdb;
+        $deps_table = ans_tickets_table('departamentos');
+        $dept_users = ans_tickets_table('departamento_users');
+        $departamentos = $wpdb->get_results("
+            SELECT d.*, (SELECT COUNT(*) FROM {$dept_users} du WHERE du.departamento_id=d.id) AS users_count
+            FROM {$deps_table} d
+            ORDER BY d.ordem_fluxo ASC
+        ");
+        $link_deps = admin_url('admin.php?page=ans-tickets-departamentos');
+        $link_assuntos = admin_url('admin.php?page=ans-tickets-assuntos');
+        $link_status = admin_url('admin.php?page=ans-tickets-status');
         ?>
         <div class="wrap">
             <h1>Configurações Gerais</h1>
 
-            <div class="ans-tabs">
-                <button class="ans-tab-btn active" data-tab="geral">Geral</button>
-                <button class="ans-tab-btn" data-tab="departamentos">Departamentos & Equipe</button>
-                <button class="ans-tab-btn" data-tab="assuntos">Assuntos</button>
-                <button class="ans-tab-btn" data-tab="status">Status Custom</button>
-                <button class="ans-tab-btn" data-tab="avancado">Avançado</button>
-            </div>
-
-            <div class="ans-tab-section" data-tab="geral">
-                <div class="ans-settings-grid">
-                    <div class="ans-config-card ans-card-highlight">
-                        <h2>Shortcodes</h2>
-                        <p class="description">Use estes shortcodes para exibir os formulários no site.</p>
-                        <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_form]">Copiar</button></div>
-                        <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_track]">Copiar</button></div>
-                        <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_dashboard]">Copiar</button></div>
-                    </div>
-                    <div class="ans-config-card">
-                        <h2>Dados da Operadora</h2>
-                        <label for="ans-config-ans">Número ANS</label>
-                        <input type="text" id="ans-config-ans" class="regular-text" placeholder="000000" maxlength="10">
-                        <p class="description">Número que será usado no protocolo.</p>
-                        <div class="ans-config-actions">
-                            <button id="ans-save-settings" class="button button-primary">Salvar</button>
-                        </div>
-                    </div>
-                    <div class="ans-config-card">
-                        <h2>Sequencial de Protocolos</h2>
-                        <p class="description">Defina o próximo número ou zere o sequencial.</p>
-                        <label for="ans-seq-start">Próximo sequencial (hoje)</label>
-                        <input type="number" id="ans-seq-start" class="small-text" min="1" value="1">
-                        <div class="ans-config-actions">
-                            <button id="ans-set-seq" class="button">Definir</button>
-                            <button id="ans-reset-seq" class="button button-secondary">Zerar tudo</button>
-                        </div>
-                        <div id="ans-seq-info" class="description"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="ans-tab-section" data-tab="departamentos" style="display:none;">
-                <div class="ans-panel-head">
-                    <div>
-                        <h2>Departamentos</h2>
-                        <p class="description">Organize fluxos (SLA, cor, usuários, assuntos) por departamento.</p>
-                    </div>
-                    <button id="ans-new-departamento" class="button button-primary">Novo Departamento</button>
-                </div>
-                <div id="ans-departamentos-list"></div>
-            </div>
-
-            <!-- Modal para criar/editar departamento -->
-            <div id="ans-departamento-modal" style="display:none;">
-                <div class="ans-modal-content">
-                    <span class="ans-modal-close">&times;</span>
-                    <h2 id="ans-modal-title">Novo Departamento</h2>
-                    <form id="ans-departamento-form">
-                        <input type="hidden" id="departamento-id" name="id">
-                        <table class="form-table">
-                            <tr>
-                                <th><label for="departamento-nome">Nome</label></th>
-                                <td><input type="text" id="departamento-nome" name="nome" class="regular-text" required></td>
-                            </tr>
-                            <tr>
-                                <th><label for="departamento-slug">Slug</label></th>
-                                <td><input type="text" id="departamento-slug" name="slug" class="regular-text" required></td>
-                            </tr>
-                            <tr>
-                                <th><label for="departamento-ordem">Ordem</label></th>
-                                <td><input type="number" id="departamento-ordem" name="ordem_fluxo" class="small-text" value="1"></td>
-                            </tr>
-                            <tr>
-                                <th><label for="departamento-cor">Cor</label></th>
-                                <td><input type="color" id="departamento-cor" name="cor" value="#0073aa"></td>
-                            </tr>
-                            <tr>
-                                <th><label for="departamento-sla">SLA (horas)</label></th>
-                                <td><input type="number" id="departamento-sla" name="sla_hours" class="small-text"></td>
-                            </tr>
-                            <tr>
-                                <th><label for="departamento-ativo">Ativo</label></th>
-                                <td><input type="checkbox" id="departamento-ativo" name="ativo" value="1" checked></td>
-                            </tr>
-                        </table>
-                        <h3>Atendentes</h3>
-                        <div id="ans-departamento-users">
-                            <?php
-                            $users = get_users(['who' => 'all']);
-                            foreach ($users as $user) {
-                                if (current_user_can('ans_answer_tickets') || $user->ID === get_current_user_id()) {
-                                    echo '<label><input type="checkbox" name="users[]" value="' . esc_attr($user->ID) . '"> ' . esc_html($user->display_name) . ' (' . esc_html($user->user_email) . ')</label><br>';
-                                }
-                            }
-                            ?>
-                        </div>
-                        <p class="submit">
-                            <button type="submit" class="button button-primary">Salvar</button>
-                            <button type="button" class="button ans-modal-cancel">Cancelar</button>
-                        </p>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Modal para excluir departamento -->
-            <div id="ans-delete-departamento-modal" style="display:none;">
-                <div class="ans-modal-content">
-                    <span class="ans-modal-close">&times;</span>
-                    <h2>Excluir Departamento</h2>
-                    <p id="ans-delete-message"></p>
-                    <form id="ans-delete-departamento-form">
-                        <input type="hidden" id="delete-departamento-id" name="id">
-                        <table class="form-table">
-                            <tr>
-                                <th><label for="transfer-departamento-id">Transferir para</label></th>
-                                <td>
-                                    <select id="transfer-departamento-id" name="transfer_to" required>
-                                        <option value="">Selecione um departamento</option>
-                                    </select>
-                                </td>
-                            </tr>
-                        </table>
-                        <p class="submit">
-                            <button type="submit" class="button button-primary button-delete">Excluir e Transferir</button>
-                            <button type="button" class="button ans-modal-cancel">Cancelar</button>
-                        </p>
-                    </form>
-                </div>
-            </div>
-
-            <hr>
-            <h2>Assuntos por Departamento</h2>
-            <div class="ans-config-grid">
-                <div class="ans-config-card">
-                    <label>Departamento</label>
-                    <select id="ans-assunto-dep"></select>
-                    <div class="ans-config-actions">
-                        <input type="text" id="ans-assunto-nome" class="regular-text" placeholder="Novo assunto">
-                        <input type="text" id="ans-assunto-slug" class="regular-text" placeholder="slug-opcional">
-                        <button id="ans-assunto-save" class="button button-primary">Salvar</button>
-                    </div>
-                    <ul id="ans-assunto-list"></ul>
+            <div class="ans-settings-grid">
+                <div class="ans-config-card ans-card-highlight">
+                    <h2>Shortcodes</h2>
+                    <p class="description">Copie e cole nos formulários/páginas.</p>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_form]">Copiar</button></div>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_track]">Copiar</button></div>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_dashboard]">Copiar</button></div>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_kanban]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_kanban]">Copiar</button></div>
                 </div>
                 <div class="ans-config-card">
-                    <h2>Status custom por departamento</h2>
-                    <label>Departamento</label>
-                    <select id="ans-status-dep"></select>
+                    <h2>Dados da Operadora</h2>
+                    <label for="ans-config-ans">Número ANS</label>
+                    <input type="text" id="ans-config-ans" class="regular-text" placeholder="000000" maxlength="10">
+                    <p class="description">Número usado no protocolo.</p>
                     <div class="ans-config-actions">
-                        <input type="text" id="ans-status-nome" class="regular-text" placeholder="Nome">
-                        <input type="text" id="ans-status-slug" class="regular-text" placeholder="slug">
-                        <input type="color" id="ans-status-cor" value="#a60069">
-                        <input type="number" id="ans-status-ordem" class="small-text" placeholder="Ordem">
-                        <label><input type="checkbox" id="ans-status-inicial"> Inicial</label>
-                        <label><input type="checkbox" id="ans-status-final-ok"> Final Resolvido</label>
-                        <label><input type="checkbox" id="ans-status-final-nok"> Final Não Resolvido</label>
-                        <button id="ans-status-save" class="button button-primary">Salvar</button>
+                        <button id="ans-save-settings" class="button button-primary">Salvar</button>
                     </div>
-                    <ul id="ans-status-list"></ul>
+                </div>
+                <div class="ans-config-card">
+                    <h2>Sequencial de Protocolos</h2>
+                    <p class="description">Defina o próximo número ou zere o sequencial.</p>
+                    <label for="ans-seq-start">Próximo sequencial (hoje)</label>
+                    <input type="number" id="ans-seq-start" class="small-text" min="1" value="1">
+                    <div class="ans-config-actions">
+                        <button id="ans-set-seq" class="button">Definir</button>
+                        <button id="ans-reset-seq" class="button button-secondary">Zerar tudo</button>
+                    </div>
+                    <div id="ans-seq-info" class="description"></div>
+                </div>
+                <div class="ans-config-card">
+                    <h2>Gestão</h2>
+                    <p class="description">CRUD completos ficam nas páginas dedicadas.</p>
+                    <p><a class="button" href="<?php echo esc_url($link_deps); ?>">Gerenciar departamentos</a></p>
+                    <p><a class="button" href="<?php echo esc_url($link_assuntos); ?>">Gerenciar assuntos</a></p>
+                    <p><a class="button" href="<?php echo esc_url($link_status); ?>">Gerenciar status custom</a></p>
                 </div>
             </div>
 
-            <div class="ans-tab-section" data-tab="assuntos" style="display:none;">
-                <div class="ans-card-light">
-                    <div class="ans-panel-head">
-                        <div>
-                            <h3>Assuntos por Departamento</h3>
-                            <p class="description">Selecione um departamento e gerencie assuntos.</p>
-                        </div>
-                    </div>
-                    <div class="ans-inline-row">
-                        <label>Departamento</label>
-                        <select id="ans-assunto-dep"></select>
-                    </div>
-                    <div class="ans-inline-row gap-sm">
-                        <input type="text" id="ans-assunto-nome" class="regular-text" placeholder="Novo assunto">
-                        <input type="text" id="ans-assunto-slug" class="regular-text" placeholder="slug-opcional">
-                        <button id="ans-assunto-save" class="button button-primary">Salvar</button>
-                    </div>
-                    <ul id="ans-assunto-list" class="ans-small-list"></ul>
-                </div>
-            </div>
-
-            <div class="ans-tab-section" data-tab="status" style="display:none;">
-                <div class="ans-card-light">
-                    <div class="ans-panel-head">
-                        <div>
-                            <h3>Status custom por departamento</h3>
-                            <p class="description">Defina funis diferentes por departamento.</p>
-                        </div>
-                    </div>
-                    <div class="ans-inline-row">
-                        <label>Departamento</label>
-                        <select id="ans-status-dep"></select>
-                    </div>
-                    <div class="ans-inline-row gap-sm">
-                        <input type="text" id="ans-status-nome" class="regular-text" placeholder="Nome">
-                        <input type="text" id="ans-status-slug" class="regular-text" placeholder="slug">
-                        <input type="color" id="ans-status-cor" value="#a60069">
-                        <input type="number" id="ans-status-ordem" class="small-text" placeholder="Ordem">
-                    </div>
-                    <div class="ans-inline-row gap-sm">
-                        <label><input type="checkbox" id="ans-status-inicial"> Inicial</label>
-                        <label><input type="checkbox" id="ans-status-final-ok"> Final Resolvido</label>
-                        <label><input type="checkbox" id="ans-status-final-nok"> Final Não Resolvido</label>
-                        <button id="ans-status-save" class="button button-primary">Salvar</button>
-                    </div>
-                    <ul id="ans-status-list" class="ans-small-list"></ul>
-                </div>
-            </div>
-
-            <div class="ans-tab-section" data-tab="avancado" style="display:none;">
-                <div class="ans-card-light">
-                    <h3>Avançado</h3>
-                    <p class="description">Espaço reservado para logs, resets, migrações e integrações futuras.</p>
-                </div>
+            <h2>Departamentos ativos</h2>
+            <div class="ans-dep-quicklist">
+                <?php
+                if (empty($departamentos)) {
+                    echo '<p>Nenhum departamento cadastrado.</p>';
+                } else {
+                    foreach ($departamentos as $dep) {
+                        $badge = $dep->cor ?: '#7a003c';
+                        $count = (int)$dep->users_count;
+                        echo '<div class="ans-dep-pill">';
+                        echo '<span class="ans-dep-dot" style="background:' . esc_attr($badge) . '"></span>';
+                        echo '<strong>' . esc_html($dep->nome) . '</strong> <small>(' . esc_html($dep->slug) . ')</small>';
+                        echo ' • Ordem ' . (int)$dep->ordem_fluxo . ' • SLA ' . ($dep->sla_hours ? (int)$dep->sla_hours . 'h' : 'N/A');
+                        echo ' • Atendentes: ' . ($count ? $count : 'nenhum');
+                        echo ' <a href="' . esc_url(add_query_arg(['page' => 'ans-tickets-departamentos', 'action' => 'edit', 'id' => $dep->id], admin_url('admin.php'))) . '">Editar</a>';
+                        echo '</div>';
+                    }
+                }
+                ?>
             </div>
         </div>
         <style>
             .ans-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:12px 0 24px}
-            .ans-panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 14px;box-shadow:0 6px 14px rgba(0,0,0,0.04)}
-            .ans-panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
-            .ans-grid-lower{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px}
-            .ans-card-light{background:#fff;border:1px solid #e4e4e4;border-radius:8px;padding:12px;box-shadow:0 6px 12px rgba(0,0,0,0.03);display:flex;flex-direction:column;gap:10px}
-            .ans-inline-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-            .ans-inline-row.gap-sm{gap:8px}
-            .ans-small-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-            .ans-small-list li{background:#f9f9fb;border:1px solid #e4e4e4;border-radius:8px;padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600}
-            .ans-tabs{display:flex;gap:8px;margin:12px 0}
-            .ans-tab-btn{border:1px solid #ddd;background:#f7f7f9;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:700}
-            .ans-tab-btn.active{background:#7a003c;color:#fff;border-color:#7a003c}
-            .ans-tab-section{margin-top:8px}
-            .ans-admin-dashboard { margin-top: 20px; }
-            .ans-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
-            .ans-stat-card { background: #fff; padding: 20px; border: 1px solid #ddd; border-radius: 4px; }
-            .ans-stat-number { font-size: 32px; font-weight: bold; color: #0073aa; margin: 10px 0; }
-            #ans-departamentos-list { margin-top: 12px; display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); }
-            .ans-departamento-item { background: #fff; padding: 12px; border: 1px solid #ddd; border-radius:10px; display: grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; box-shadow:0 4px 10px rgba(0,0,0,0.03); }
-            .ans-departamento-badge{width:12px;height:12px;border-radius:50%;}
-            .ans-departamento-info h3 { margin: 0; font-size:15px; }
-            .ans-departamento-info p { margin:2px 0 0;font-size:12px;color:#4a4a4a }
-            .ans-departamento-actions { display: flex; gap: 6px; }
-            .ans-sla-pill{background:#f0f0ff;border-radius:12px;padding:2px 8px;font-weight:700}
-            #ans-departamento-modal, #ans-delete-departamento-modal { position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-            .ans-modal-content { background: #fff; margin: 5% auto; padding: 20px; width: 80%; max-width: 600px; position: relative; }
-            .ans-modal-close { position: absolute; right: 20px; top: 20px; font-size: 28px; cursor: pointer; }
-            #ans-departamento-users { max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
-            #ans-departamento-users label { display: block; padding: 5px; }
-            .button-delete { background: #dc3232; border-color: #dc3232; color: #fff; }
-            .ans-config-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 16px; margin: 12px 0 24px; }
-            .ans-config-card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 16px; }
-            .ans-config-card h2 { margin-top: 0; }
-            .ans-config-card label { font-weight: 600; display: block; margin-top: 8px; }
-            .ans-config-card input[type="text"], .ans-config-card input[type="number"] { width: 100%; max-width: 240px; }
-            .ans-config-actions { margin-top: 10px; display: flex; gap: 8px; }
-            #ans-seq-info { margin-top: 6px; }
-            .ans-card-highlight { border-color: #7a003c; box-shadow: 0 6px 12px rgba(122,0,60,0.08); }
-            .ans-shortcode-row { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
-            .ans-shortcode-row code { background: #f5f5f5; padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd; font-weight: 600; }
+            .ans-config-card { background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;box-shadow:0 6px 12px rgba(0,0,0,0.03); }
+            .ans-config-card h2{margin-top:0;}
+            .ans-card-highlight { border-color:#7a003c; box-shadow:0 6px 12px rgba(122,0,60,0.08); }
+            .ans-config-card label { font-weight:600; display:block; margin-top:8px; }
+            .ans-config-card input[type="text"], .ans-config-card input[type="number"] { width:100%; max-width:240px; }
+            .ans-config-actions { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; }
+            .ans-shortcode-row { display:flex; gap:10px; align-items:center; margin:6px 0; }
+            .ans-shortcode-row code { background:#f5f5f5; padding:6px 10px; border-radius:6px; border:1px solid #ddd; font-weight:600; }
+            .ans-dep-quicklist { margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+            .ans-dep-pill { background:#fff; border:1px solid #eee; border-radius:10px; padding:10px 12px; box-shadow:0 4px 10px rgba(0,0,0,0.02); }
+            .ans-dep-dot { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
         </style>
         <script>
         jQuery(document).ready(function($) {
-            loadDepartamentos();
             loadSettings();
-            initAssuntos();
-            initStatus();
-            
-            $('#ans-new-departamento').on('click', function() {
-                $('#ans-modal-title').text('Novo Departamento');
-                $('#ans-departamento-form')[0].reset();
-                $('#departamento-id').val('');
-                $('#ans-departamento-modal').show();
-            });
-
-            $('.ans-modal-close, .ans-modal-cancel').on('click', function() {
-                $('#ans-departamento-modal, #ans-delete-departamento-modal').hide();
-            });
-
-            $('#ans-departamento-form').on('submit', function(e) {
-                e.preventDefault();
-                const data = {
-                    nome: $('#departamento-nome').val(),
-                    slug: $('#departamento-slug').val(),
-                    ordem_fluxo: $('#departamento-ordem').val(),
-                    cor: $('#departamento-cor').val(),
-                    sla_hours: $('#departamento-sla').val() || null,
-                    ativo: $('#departamento-ativo').is(':checked') ? 1 : 0,
-                    users: $('input[name="users[]"]:checked').map(function() { return $(this).val(); }).get()
-                };
-                const id = $('#departamento-id').val();
-                const url = ANS_TICKETS_ADMIN.api + '/admin/departamentos' + (id ? '/' + id : '');
-                const method = id ? 'PUT' : 'POST';
-
-                $.ajax({
-                    url: url,
-                    method: method,
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    data: JSON.stringify(data),
-                    contentType: 'application/json',
-                    success: function() {
-                        loadDepartamentos();
-                        $('#ans-departamento-modal').hide();
-                    },
-                    error: function(xhr) {
-                        alert('Erro: ' + (xhr.responseJSON?.error || 'Erro desconhecido'));
-                    }
-                });
-            });
 
             function loadSettings(){
                 $.ajax({
@@ -510,221 +291,11 @@ class ANS_Tickets_Admin
                 });
             });
 
-            $('.ans-tab-btn').on('click', function(){
-                const tab = $(this).data('tab');
-                $('.ans-tab-btn').removeClass('active');
-                $(this).addClass('active');
-                $('.ans-tab-section').hide();
-                $('.ans-tab-section[data-tab="'+tab+'"]').show();
-            });
-
             $(document).on('click','.ans-copy', function(){
                 const code = $(this).data('code');
                 navigator.clipboard.writeText(code);
                 $(this).text('Copiado!').prop('disabled', true);
                 setTimeout(()=>{ $(this).text('Copiar').prop('disabled', false); }, 1200);
-            });
-
-            function loadDepartamentos() {
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos',
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    success: function(departamentos) {
-                        let html = '';
-                        departamentos.forEach(function(dept) {
-                            html += '<div class="ans-departamento-item">';
-                            html += '<div class="ans-departamento-badge" style="background:'+(dept.cor||\'#7a003c\')+'"></div>';
-                            html += '<div class="ans-departamento-info">';
-                            html += '<h3>' + dept.nome + ' <small>(' + dept.slug + ')</small></h3>';
-                            html += '<p>Ordem: ' + dept.ordem_fluxo + ' | SLA: <span class="ans-sla-pill">'+ (dept.sla_hours || 'N/A') +'h</span> | Ativo: ' + (dept.ativo ? 'Sim' : 'Não') + '</p>';
-                            html += '</div>';
-                            html += '<div class="ans-departamento-actions">';
-                            html += '<button class="button ans-edit-dept" data-id="' + dept.id + '">Editar</button>';
-                            html += '<button class="button button-delete ans-delete-dept" data-id="' + dept.id + '">Excluir</button>';
-                            html += '</div>';
-                            html += '</div>';
-                        });
-                        $('#ans-departamentos-list').html(html || '<p>Nenhum departamento cadastrado.</p>');
-                    }
-                });
-            }
-
-            $(document).on('click', '.ans-edit-dept', function() {
-                const id = $(this).data('id');
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos/' + id,
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    success: function(dept) {
-                        $('#departamento-id').val(dept.id);
-                        $('#departamento-nome').val(dept.nome);
-                        $('#departamento-slug').val(dept.slug);
-                        $('#departamento-ordem').val(dept.ordem_fluxo);
-                        $('#departamento-cor').val(dept.cor || '#0073aa');
-                        $('#departamento-sla').val(dept.sla_hours || '');
-                        $('#departamento-ativo').prop('checked', dept.ativo);
-                        $('input[name="users[]"]').prop('checked', false);
-                        if (dept.users) {
-                            dept.users.forEach(function(userId) {
-                                $('input[name="users[]"][value="' + userId + '"]').prop('checked', true);
-                            });
-                        }
-                        $('#ans-modal-title').text('Editar Departamento');
-                        $('#ans-departamento-modal').show();
-                    }
-                });
-            });
-
-            $(document).on('click', '.ans-delete-dept', function() {
-                const id = $(this).data('id');
-                $('#delete-departamento-id').val(id);
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos',
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    success: function(departamentos) {
-                        let options = '<option value="">Selecione um departamento</option>';
-                        departamentos.forEach(function(dept) {
-                            if (dept.id != id) {
-                                options += '<option value="' + dept.id + '">' + dept.nome + '</option>';
-                            }
-                        });
-                        $('#transfer-departamento-id').html(options);
-                        $('#ans-delete-message').text('Este departamento possui protocolos abertos. Selecione um departamento para transferir os chamados.');
-                        $('#ans-delete-departamento-modal').show();
-                    }
-                });
-            });
-
-            $('#ans-delete-departamento-form').on('submit', function(e) {
-                e.preventDefault();
-                const id = $('#delete-departamento-id').val();
-                const transferTo = $('#transfer-departamento-id').val();
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos/' + id,
-                    method: 'DELETE',
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    data: JSON.stringify({ transfer_to: transferTo }),
-                    contentType: 'application/json',
-                    success: function() {
-                        loadDepartamentos();
-                        $('#ans-delete-departamento-modal').hide();
-                    },
-                    error: function(xhr) {
-                        alert('Erro: ' + (xhr.responseJSON?.error || 'Erro desconhecido'));
-                    }
-                });
-            });
-
-            function initAssuntos() {
-                loadAssuntoDeps();
-                $('#ans-assunto-save').on('click', function(){
-                    const dep = parseInt($('#ans-assunto-dep').val(),10);
-                    const nome = $('#ans-assunto-nome').val();
-                    const slug = $('#ans-assunto-slug').val();
-                    if(!dep || !nome){ alert('Selecione departamento e informe o nome'); return; }
-                    $.ajax({
-                        url: ANS_TICKETS_ADMIN.api + '/admin/assuntos',
-                        method: 'POST',
-                        headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                        data: JSON.stringify({departamento_id: dep, nome, slug}),
-                        contentType: 'application/json',
-                        success: function(){ $('#ans-assunto-nome').val(''); $('#ans-assunto-slug').val(''); loadAssuntos(dep); },
-                        error: function(xhr){ alert(xhr.responseJSON?.error || 'Erro'); }
-                    });
-                });
-                $('#ans-assunto-dep').on('change', function(){
-                    loadAssuntos(parseInt(this.value,10));
-                });
-            }
-
-            function loadAssuntoDeps(){
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/departamentos',
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    success: function(deps){
-                        const opts = deps.map(d=>'<option value="'+d.id+'">'+d.nome+'</option>').join('');
-                        $('#ans-assunto-dep, #ans-status-dep').html('<option value="">Selecione</option>'+opts);
-                    }
-                });
-            }
-
-            function loadAssuntos(depId){
-                if(!depId){ $('#ans-assunto-list').html('<li>Selecione um departamento.</li>'); return; }
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/assuntos?departamento_id='+depId,
-                    headers: { 'X-WP-Nonce': ANS_TICKETS_ADMIN.nonce },
-                    success: function(rows){
-                        if(!rows.length){ $('#ans-assunto-list').html('<li>Nenhum assunto.</li>'); return; }
-                        const html = rows.map(r=>'<li data-id="'+r.id+'">'+r.nome+' <button class="button-link ans-del-assunto" data-id="'+r.id+'">Excluir</button></li>').join('');
-                        $('#ans-assunto-list').html(html);
-                    }
-                });
-            }
-
-            $(document).on('click','.ans-del-assunto', function(){
-                const id = $(this).data('id');
-                if(!confirm('Excluir assunto?')) return;
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/assuntos/'+id,
-                    method:'DELETE',
-                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
-                    success:function(){ loadAssuntos(parseInt($('#ans-assunto-dep').val(),10)); }
-                });
-            });
-
-            function initStatus(){
-                $('#ans-status-save').on('click', function(){
-                    const dep = parseInt($('#ans-status-dep').val(),10);
-                    const nome = $('#ans-status-nome').val();
-                    const slug = $('#ans-status-slug').val();
-                    const cor = $('#ans-status-cor').val();
-                    const ordem = parseInt($('#ans-status-ordem').val(),10) || 0;
-                    const inicial = $('#ans-status-inicial').is(':checked');
-                    const finalOk = $('#ans-status-final-ok').is(':checked');
-                    const finalNok = $('#ans-status-final-nok').is(':checked');
-                    if(!nome || !slug){ alert('Informe nome e slug'); return; }
-                    $.ajax({
-                        url: ANS_TICKETS_ADMIN.api + '/admin/status-custom',
-                        method:'POST',
-                        headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
-                        data: JSON.stringify({departamento_id: dep||null, nome, slug, cor, ordem, inicial, final_resolvido: finalOk, final_nao_resolvido: finalNok}),
-                        contentType:'application/json',
-                        success:function(){ $('#ans-status-nome').val(''); $('#ans-status-slug').val(''); $('#ans-status-inicial,#ans-status-final-ok,#ans-status-final-nok').prop('checked',false); loadStatus(dep); },
-                        error:function(xhr){ alert(xhr.responseJSON?.error||'Erro'); }
-                    });
-                });
-                $('#ans-status-dep').on('change', function(){
-                    loadStatus(parseInt(this.value,10));
-                });
-            }
-
-            function loadStatus(depId){
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/status-custom' + (depId ? ('?departamento_id='+depId) : ''),
-                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
-                    success:function(rows){
-                        if(!rows.length){ $('#ans-status-list').html('<li>Nenhum status custom.</li>'); return; }
-                        const html = rows.map(r=>{
-                            const flags = [
-                                r.inicial ? 'Inicial' : '',
-                                r.final_resolvido ? 'Final Resolvido' : '',
-                                r.final_nao_resolvido ? 'Final Não Resolvido' : ''
-                            ].filter(Boolean).join(' • ');
-                            return '<li data-id="'+r.id+'"><span style="display:inline-block;width:12px;height:12px;background:'+ (r.cor||'#ccc') +';border-radius:50%;margin-right:6px"></span>'+r.nome+' ('+r.slug+') '+(flags?'<em>['+flags+']</em>':'')+' <button class="button-link ans-del-status" data-id="'+r.id+'">Excluir</button></li>';
-                        }).join('');
-                        $('#ans-status-list').html(html);
-                    }
-                });
-            }
-
-            $(document).on('click','.ans-del-status', function(){
-                const id = $(this).data('id');
-                if(!confirm('Excluir status?')) return;
-                $.ajax({
-                    url: ANS_TICKETS_ADMIN.api + '/admin/status-custom/'+id,
-                    method:'DELETE',
-                    headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
-                    success:function(){ loadStatus(parseInt($('#ans-status-dep').val(),10)); }
-                });
             });
         });
         </script>
@@ -825,25 +396,30 @@ class ANS_Tickets_Admin
         require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
         global $wpdb;
         $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
 
-            $message = '';
-            if (!empty($_POST['ans_dep_nonce']) && wp_verify_nonce($_POST['ans_dep_nonce'], 'ans_dep_save')) {
-                $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-                $nome = sanitize_text_field($_POST['nome'] ?? '');
-                $slug = $_POST['slug'] !== '' ? sanitize_title($_POST['slug']) : sanitize_title($nome);
-                $data = [
-                    'nome' => $nome,
-                    'slug' => $slug,
-                    'ordem_fluxo' => (int)($_POST['ordem_fluxo'] ?? 1),
-                    'cor' => sanitize_text_field($_POST['cor'] ?? '#7a003c'),
+        $message = '';
+        if (!empty($_POST['ans_dep_nonce']) && wp_verify_nonce($_POST['ans_dep_nonce'], 'ans_dep_save')) {
+            $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+            $nome = sanitize_text_field($_POST['nome'] ?? '');
+            $slug = $_POST['slug'] !== '' ? sanitize_title($_POST['slug']) : sanitize_title($nome);
+            $usersSelected = array_map('intval', $_POST['users'] ?? []);
+            $data = [
+                'nome' => $nome,
+                'slug' => $slug,
+                'ordem_fluxo' => (int)($_POST['ordem_fluxo'] ?? 1),
+                'cor' => sanitize_text_field($_POST['cor'] ?? '#7a003c'),
                 'sla_hours' => $_POST['sla_hours'] !== '' ? (int)$_POST['sla_hours'] : null,
                 'ativo' => !empty($_POST['ativo']) ? 1 : 0,
             ];
             if ($id) {
                 $wpdb->update($table, $data, ['id' => $id]);
+                self::sync_departamento_users($id, $usersSelected);
                 $message = 'Departamento atualizado.';
             } else {
                 $wpdb->insert($table, $data);
+                $newId = (int)$wpdb->insert_id;
+                self::sync_departamento_users($newId, $usersSelected);
                 $message = 'Departamento criado.';
             }
         }
@@ -857,9 +433,15 @@ class ANS_Tickets_Admin
         $list = new ANS_Departamento_List_Table();
         $list->prepare_items();
         $editing = null;
+        $editingUsers = [];
         if (!empty($_GET['action']) && $_GET['action'] === 'edit' && !empty($_GET['id'])) {
             $editing = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE id=%d", (int)$_GET['id']), ARRAY_A);
+            $editingUsers = $wpdb->get_col($wpdb->prepare(
+                "SELECT user_id FROM {$table_users} WHERE departamento_id=%d",
+                (int)$_GET['id']
+            ));
         }
+        $allUsers = get_users(['orderby' => 'display_name', 'order' => 'ASC']);
         ?>
         <div class="wrap">
             <h1>Departamentos</h1>
@@ -868,11 +450,19 @@ class ANS_Tickets_Admin
                 <?php wp_nonce_field('ans_dep_save', 'ans_dep_nonce'); ?>
                 <input type="hidden" name="id" value="<?php echo esc_attr($editing['id'] ?? 0); ?>">
                 <input type="text" name="nome" placeholder="Nome" value="<?php echo esc_attr($editing['nome'] ?? ''); ?>" required>
-                <input type="text" name="slug" placeholder="slug" value="<?php echo esc_attr($editing['slug'] ?? ''); ?>" required>
+                <input type="text" name="slug" placeholder="slug" value="<?php echo esc_attr($editing['slug'] ?? ''); ?>">
                 <input type="number" name="ordem_fluxo" placeholder="Ordem" value="<?php echo esc_attr($editing['ordem_fluxo'] ?? 1); ?>" min="1">
                 <input type="color" name="cor" value="<?php echo esc_attr($editing['cor'] ?? '#7a003c'); ?>">
                 <input type="number" name="sla_hours" placeholder="SLA (h)" value="<?php echo esc_attr($editing['sla_hours'] ?? ''); ?>">
                 <label><input type="checkbox" name="ativo" value="1" <?php checked($editing['ativo'] ?? 1); ?>> Ativo</label>
+                <div class="ans-users-select">
+                    <strong>Atendentes</strong>
+                    <div class="ans-users-grid">
+                        <?php foreach ($allUsers as $u): ?>
+                            <label><input type="checkbox" name="users[]" value="<?php echo esc_attr($u->ID); ?>" <?php checked(in_array((int)$u->ID, $editingUsers, true)); ?>> <?php echo esc_html($u->display_name); ?></label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
                 <?php submit_button($editing ? 'Atualizar' : 'Adicionar', 'primary', 'submit', false); ?>
                 <?php if ($editing): ?>
                     <a href="<?php echo admin_url('admin.php?page=ans-tickets-departamentos'); ?>" class="button">Cancelar</a>
@@ -883,8 +473,29 @@ class ANS_Tickets_Admin
                 <?php $list->search_box('Buscar', 'ans_dep_search'); ?>
                 <?php $list->display(); ?>
             </form>
+            <style>
+                .ans-inline-form { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; background:#fff; padding:10px; border:1px solid #ddd; border-radius:8px; }
+                .ans-inline-form input[type="text"], .ans-inline-form input[type="number"], .ans-inline-form input[type="color"] { margin-right:4px; }
+                .ans-users-select { padding:8px 10px; border:1px solid #e2e2e2; border-radius:8px; background:#f9f9fb; max-height:180px; overflow-y:auto; }
+                .ans-users-select strong { display:block; margin-bottom:6px; }
+                .ans-users-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:6px; }
+            </style>
         </div>
         <?php
+    }
+
+    private static function sync_departamento_users(int $departamentoId, array $users): void
+    {
+        global $wpdb;
+        $table_users = ans_tickets_table('departamento_users');
+        $wpdb->delete($table_users, ['departamento_id' => $departamentoId]);
+        $clean = array_unique(array_filter(array_map('intval', $users)));
+        foreach ($clean as $userId) {
+            $wpdb->insert($table_users, [
+                'departamento_id' => $departamentoId,
+                'user_id' => $userId,
+            ]);
+        }
     }
 
     public static function render_assuntos_table(): void
@@ -1052,6 +663,86 @@ class ANS_Tickets_Admin
         </div>
         <?php
     }
+
+    private static function seed_default_statuses(): void
+    {
+        global $wpdb;
+        $deptTable = ans_tickets_table('departamentos');
+        $statusTable = ans_tickets_table('status_custom');
+        if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $statusTable))) {
+            return;
+        }
+        $deptMap = $wpdb->get_results("SELECT id, slug FROM {$deptTable}", OBJECT_K);
+        $pipelines = [
+            'assistencial' => [
+                ['Recebido', true, false, false],
+                ['Em Análise Técnica', false, false, false],
+                ['Pendência de Documentos', false, false, false],
+                ['Aguardando Cooperado / Rede', false, false, false],
+                ['Autorizado', false, false, false],
+                ['Negado / Glosado', false, false, true],
+                ['Concluído', false, true, false],
+            ],
+            'atendimento' => [
+                ['Recebido', true, false, false],
+                ['Em Atendimento', false, false, false],
+                ['Aguardando Retorno do Beneficiário', false, false, false],
+                ['Aguardando Terceiros (TI / Comercial / Financeiro)', false, false, false],
+                ['Resolvido', false, true, false],
+                ['Não Resolvido', false, false, true],
+            ],
+            'comercial' => [
+                ['Recebido', true, false, false],
+                ['Qualificação da Demanda', false, false, false],
+                ['Proposta Enviada', false, false, false],
+                ['Aguardando Aprovação', false, false, false],
+                ['Aprovado', false, true, false],
+                ['Recusado', false, false, true],
+                ['Concluído', false, true, false],
+            ],
+            'financeiro' => [
+                ['Recebido', true, false, false],
+                ['Em Verificação', false, false, false],
+                ['Aguardando Documentos', false, false, false],
+                ['Ajustes em Execução', false, false, false],
+                ['Finalizado com Sucesso', false, true, false],
+                ['Finalizado com Pendências', false, false, true],
+            ],
+            'ouvidoria' => [
+                ['Recebido', true, false, false],
+                ['Admissibilidade / Classificação', false, false, false],
+                ['Encaminhado ao Setor Responsável', false, false, false],
+                ['Aguardando Resposta', false, false, false],
+                ['Retorno ao Beneficiário', false, false, false],
+                ['Resolvido', false, true, false],
+                ['Não Resolvido', false, false, true],
+            ],
+        ];
+        foreach ($pipelines as $slugDept => $statuses) {
+            if (empty($deptMap[$slugDept])) {
+                continue;
+            }
+            $depId = (int)$deptMap[$slugDept]->id;
+            foreach ($statuses as $idx => [$nome, $inicial, $finalOk, $finalNok]) {
+                $slug = sanitize_title($nome);
+                $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$statusTable} WHERE slug=%s AND departamento_id=%d", $slug, $depId));
+                if ($exists) {
+                    continue;
+                }
+                $wpdb->insert($statusTable, [
+                    'departamento_id' => $depId,
+                    'nome' => $nome,
+                    'slug' => $slug,
+                    'cor' => '#7a003c',
+                    'ordem' => $idx,
+                    'ativo' => 1,
+                    'inicial' => $inicial ? 1 : 0,
+                    'final_resolvido' => $finalOk ? 1 : 0,
+                    'final_nao_resolvido' => $finalNok ? 1 : 0,
+                ]);
+            }
+        }
+    }
 }
 
 // Garantir que a base de listagem esteja disponível antes de declarar a tabela customizada
@@ -1212,6 +903,7 @@ class ANS_Departamento_List_Table extends WP_List_Table
             'slug' => 'Slug',
             'ordem_fluxo' => 'Ordem',
             'sla_hours' => 'SLA (h)',
+            'users_count' => 'Atendentes',
             'ativo' => 'Ativo',
         ];
     }
@@ -1235,6 +927,10 @@ class ANS_Departamento_List_Table extends WP_List_Table
         if ($column_name === 'ativo') {
             return $item['ativo'] ? 'Sim' : 'Não';
         }
+        if ($column_name === 'users_count') {
+            $count = (int)($item['users_count'] ?? 0);
+            return $count ? $count : '0';
+        }
         return esc_html($item[$column_name] ?? '');
     }
 
@@ -1247,13 +943,19 @@ class ANS_Departamento_List_Table extends WP_List_Table
     {
         global $wpdb;
         $table = ans_tickets_table('departamentos');
+        $table_users = ans_tickets_table('departamento_users');
         $search = isset($_REQUEST['s']) ? sanitize_text_field($_REQUEST['s']) : '';
         $where = '';
         if ($search) {
             $like = '%' . $wpdb->esc_like($search) . '%';
             $where = $wpdb->prepare("WHERE nome LIKE %s OR slug LIKE %s", $like, $like);
         }
-        $this->items_raw = $wpdb->get_results("SELECT * FROM {$table} {$where} ORDER BY ordem_fluxo ASC", ARRAY_A);
+        $this->items_raw = $wpdb->get_results("
+            SELECT d.*, (SELECT COUNT(*) FROM {$table_users} du WHERE du.departamento_id=d.id) AS users_count
+            FROM {$table} d
+            {$where}
+            ORDER BY d.ordem_fluxo ASC
+        ", ARRAY_A);
         $this->items = $this->items_raw;
         $this->_column_headers = [$this->get_columns(), [], []];
     }
@@ -1390,82 +1092,3 @@ class ANS_Status_List_Table extends WP_List_Table
         $this->_column_headers = [$this->get_columns(), [], []];
     }
 }
-    private static function seed_default_statuses(): void
-    {
-        global $wpdb;
-        $deptTable = ans_tickets_table('departamentos');
-        $statusTable = ans_tickets_table('status_custom');
-        if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $statusTable))) {
-            return;
-        }
-        $deptMap = $wpdb->get_results("SELECT id, slug FROM {$deptTable}", OBJECT_K);
-        $pipelines = [
-            'assistencial' => [
-                ['Recebido', true, false, false],
-                ['Em Análise Técnica', false, false, false],
-                ['Pendência de Documentos', false, false, false],
-                ['Aguardando Cooperado / Rede', false, false, false],
-                ['Autorizado', false, false, false],
-                ['Negado / Glosado', false, false, true],
-                ['Concluído', false, true, false],
-            ],
-            'atendimento' => [
-                ['Recebido', true, false, false],
-                ['Em Atendimento', false, false, false],
-                ['Aguardando Retorno do Beneficiário', false, false, false],
-                ['Aguardando Terceiros (TI / Comercial / Financeiro)', false, false, false],
-                ['Resolvido', false, true, false],
-                ['Não Resolvido', false, false, true],
-            ],
-            'comercial' => [
-                ['Recebido', true, false, false],
-                ['Qualificação da Demanda', false, false, false],
-                ['Proposta Enviada', false, false, false],
-                ['Aguardando Aprovação', false, false, false],
-                ['Aprovado', false, true, false],
-                ['Recusado', false, false, true],
-                ['Concluído', false, true, false],
-            ],
-            'financeiro' => [
-                ['Recebido', true, false, false],
-                ['Em Verificação', false, false, false],
-                ['Aguardando Documentos', false, false, false],
-                ['Ajustes em Execução', false, false, false],
-                ['Finalizado com Sucesso', false, true, false],
-                ['Finalizado com Pendências', false, false, true],
-            ],
-            'ouvidoria' => [
-                ['Recebido', true, false, false],
-                ['Admissibilidade / Classificação', false, false, false],
-                ['Encaminhado ao Setor Responsável', false, false, false],
-                ['Aguardando Resposta', false, false, false],
-                ['Retorno ao Beneficiário', false, false, false],
-                ['Resolvido', false, true, false],
-                ['Não Resolvido', false, false, true],
-            ],
-        ];
-        foreach ($pipelines as $slugDept => $statuses) {
-            if (empty($deptMap[$slugDept])) {
-                continue;
-            }
-            $depId = (int)$deptMap[$slugDept]->id;
-            foreach ($statuses as $idx => [$nome, $inicial, $finalOk, $finalNok]) {
-                $slug = sanitize_title($nome);
-                $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$statusTable} WHERE slug=%s AND departamento_id=%d", $slug, $depId));
-                if ($exists) {
-                    continue;
-                }
-                $wpdb->insert($statusTable, [
-                    'departamento_id' => $depId,
-                    'nome' => $nome,
-                    'slug' => $slug,
-                    'cor' => '#7a003c',
-                    'ordem' => $idx,
-                    'ativo' => 1,
-                    'inicial' => $inicial ? 1 : 0,
-                    'final_resolvido' => $finalOk ? 1 : 0,
-                    'final_nao_resolvido' => $finalNok ? 1 : 0,
-                ]);
-            }
-        }
-    }

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.7.0
+ * Version: 0.7.7
  * Author: Collos Ltda
  */
 
@@ -142,7 +142,7 @@ add_shortcode('ans_ticket_kanban', function () {
     wp_localize_script('ans-tickets-kanban', 'ANS_TICKETS_KANBAN', [
         'api' => get_rest_url(null, ANS_TICKETS_NAMESPACE),
         'nonce' => wp_create_nonce('wp_rest'),
-        'status' => ans_tickets_statuses(),
+        'status' => [], // deixa o JS puxar status custom (global/depto)
         'prioridades' => ans_tickets_default_prioridades(),
     ]);
     ob_start();
@@ -262,6 +262,15 @@ add_shortcode('ans_ticket_dashboard', function () {
         'user' => wp_get_current_user()->display_name,
         'user_id' => get_current_user_id(),
     ]);
+    // Kanban assets para a aba alternada
+    wp_enqueue_style('ans-tickets-kanban', ANS_TICKETS_URL . 'assets/kanban.css', [], ANS_TICKETS_VERSION);
+    wp_enqueue_script('ans-tickets-kanban', ANS_TICKETS_URL . 'assets/kanban.js', [], ANS_TICKETS_VERSION, true);
+    wp_localize_script('ans-tickets-kanban', 'ANS_TICKETS_KANBAN', [
+        'api' => get_rest_url(null, ANS_TICKETS_NAMESPACE),
+        'nonce' => wp_create_nonce('wp_rest'),
+        'status' => [],
+        'prioridades' => ans_tickets_default_prioridades(),
+    ]);
     ob_start();
     ?>
     <div id="ans-dashboard" class="ans-dashboard">
@@ -273,8 +282,13 @@ add_shortcode('ans_ticket_dashboard', function () {
             </div>
             <div class="ans-head-meta">
                 <div class="ans-pill">Sessão ativa</div>
+                <button class="btn btn-secondary" id="ans-refresh-btn">Atualizar</button>
             </div>
         </header>
+        <div class="ans-tab-bar">
+            <button class="ans-tab-btn active" data-tab="table">Tabela</button>
+            <button class="ans-tab-btn" data-tab="kanban">Kanban</button>
+        </div>
         <section class="ans-filter-panel">
             <div class="ans-dash-filters">
                 <div class="ans-filter-grid ans-filter-grid-4">
@@ -282,16 +296,6 @@ add_shortcode('ans_ticket_dashboard', function () {
                         <span>Status</span>
                         <select id="filter-status">
                             <option value="">Todos</option>
-                            <option value="aberto">Aberto</option>
-                            <option value="em_triagem">Em Triagem</option>
-                            <option value="aguardando_informacoes_solicitante">Aguardando Informações do Solicitante</option>
-                            <option value="em_analise">Em Análise</option>
-                            <option value="em_execucao">Em Atendimento / Execução</option>
-                            <option value="aguardando_terceiros">Aguardando Terceiros</option>
-                            <option value="aguardando_aprovacao">Aguardando Aprovação</option>
-                            <option value="solucao_proposta">Solução Proposta</option>
-                            <option value="resolvido">Resolvido</option>
-                            <option value="fechado">Fechado</option>
                         </select>
                     </label>
                     <label class="ans-field">
@@ -328,7 +332,7 @@ add_shortcode('ans_ticket_dashboard', function () {
                 </div>
             </div>
         </section>
-        <main class="ans-dash-main">
+        <main class="ans-dash-main" id="tab-table">
             <section class="ans-dash-list">
                 <div class="ans-side-filter">
                     <h4>Filtrar protocolos</h4>
@@ -351,6 +355,20 @@ add_shortcode('ans_ticket_dashboard', function () {
                 <div class="placeholder">Selecione um chamado</div>
             </section>
         </main>
+        <section id="tab-kanban" class="ans-kanban-wrapper" style="display:none;">
+            <div id="ans-kanban" class="ans-kanban">
+                <div class="kanban-filters">
+                    <select id="kanban-filter-status"><option value="">Status</option></select>
+                    <select id="kanban-filter-dep"><option value="">Departamento</option></select>
+                    <select id="kanban-filter-resp"><option value="">Responsável</option></select>
+                    <select id="kanban-filter-pri"><option value="">Prioridade</option><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option></select>
+                    <input type="text" id="kanban-filter-proto" placeholder="Protocolo">
+                    <input type="text" id="kanban-filter-doc" placeholder="Documento">
+                    <button id="kanban-apply" class="btn btn-primary">Filtrar</button>
+                </div>
+                <div id="kanban-board" class="kanban-board" aria-live="polite"></div>
+            </div>
+        </section>
     </div>
     <?php
     return ob_get_clean();

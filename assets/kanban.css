@@ -12,6 +12,7 @@
 .kanban-top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
 .kanban-card .client{font-weight:800;color:#1c1c1c}
 .kanban-card .meta{font-size:12px;color:#4a4a4a}
+.kanban-card .status-pill{display:inline-block;font-size:11px;font-weight:700;color:#555;background:#f2f2f5;border-radius:10px;padding:2px 8px;margin-top:4px}
 .priority{padding:4px 8px;border-radius:12px;font-size:12px;text-transform:capitalize}
 .pri-alta{background:#ff637e33;color:#a60000}
 .pri-media{background:#ffb00033;color:#8a5b00}
@@ -20,3 +21,39 @@
 .sla span{display:block;height:100%;background:linear-gradient(90deg,#7a003c,#c15f9c)}
 .kanban-load{margin:0 10px 10px;border:1px dashed #d0d0d0;background:transparent;padding:8px;border-radius:8px;cursor:pointer;font-weight:700;color:#4a4a4a}
 .proto{font-weight:800;color:#1c1c1c}
+.kanban-modal-backdrop{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9998}
+.kanban-modal{position:fixed;right:20px;top:40px;width:360px;background:#fff;border-radius:12px;border:1px solid #e0e0e0;box-shadow:0 12px 30px rgba(0,0,0,0.12);padding:16px;z-index:9999}
+.kanban-modal .modal-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.kanban-modal .modal-title{font-weight:700;font-size:15px}
+.kanban-modal .modal-meta{font-size:12px;color:#666}
+.kanban-modal label{display:block;font-size:13px;font-weight:700;margin-top:10px}
+.kanban-modal select{width:100%}
+.kanban-modal .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.kanban-modal .ans-btn{padding:6px 10px;font-size:13px;border:1px solid #7a003c;color:#7a003c;background:#fff;border-radius:6px;cursor:pointer}
+.kanban-modal .ans-btn:hover{background:#7a003c;color:#fff}
+.kanban-modal .ans-btn.ghost{border-color:#ccc;color:#333}
+.detail-card{margin-top:16px;background:#fff;border:1px solid #e4e4e4;border-radius:12px;box-shadow:0 8px 18px rgba(0,0,0,0.05);padding:16px}
+.detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.detail-head .title{font-weight:800;font-size:16px}
+.detail-head .meta{font-size:12px;color:#666}
+.detail-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px}
+.detail-grid .card{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;padding:12px}
+.detail-grid .card-title{font-weight:700;margin-bottom:8px}
+.detail-grid textarea{width:100%;min-height:120px;border:1px solid #dcdcdc;border-radius:8px;padding:8px;resize:vertical}
+.detail-grid label{display:block;font-weight:700;font-size:13px;margin-bottom:6px}
+.detail-grid select,input[type="file"]{width:100%;padding:8px;border:1px solid #dcdcdc;border-radius:8px}
+.actions-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.btn{border:1px solid #7a003c;background:#fff;color:#7a003c;border-radius:6px;padding:6px 10px;cursor:pointer;font-weight:700}
+.btn:hover{background:#7a003c;color:#fff}
+.btn.ghost{border-color:#ccc;color:#444}
+.btn.success{background:#2d9f6f;border-color:#2d9f6f;color:#fff}
+.btn.warn{background:#f7b733;border-color:#f7b733;color:#fff}
+.btn.info{background:#3a7bd5;border-color:#3a7bd5;color:#fff}
+.timeline .chat-bubble{background:#fff;border:1px solid #ededed;border-radius:10px;padding:8px;margin-top:8px}
+.timeline .chat-bubble .chat-head{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px}
+.timeline .chat-bubble .chat-body{font-size:14px}
+.timeline .chat-bubble.internal{background:#fff7d6}
+.timeline .chat-bubble.client{background:#e8f7ff}
+.timeline .chat-bubble.agent{background:#f2edff}
+.ans-date-sep{margin-top:8px;font-weight:800;text-align:center;color:#555}
+.attach-row{margin-top:6px}

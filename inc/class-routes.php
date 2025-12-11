@@ -327,6 +327,7 @@ class ANS_Tickets_Routes
         $table_clientes = ans_tickets_table('clientes');
         $table_interacoes = ans_tickets_table('interacoes');
         $table_departamentos = ans_tickets_table('departamentos');
+        $table_anexos = ans_tickets_table('anexos');
 
         $fields = ['nome_completo', 'email', 'telefone', 'whatsapp', 'documento', 'data_nascimento', 'cliente_uniodonto', 'assunto', 'descricao'];
         foreach ($fields as $f) {
@@ -545,6 +546,7 @@ class ANS_Tickets_Routes
             return empty($i->interno);
         }));
         $ticket['anexos'] = $anexos;
+        $ticket['status_label'] = ans_tickets_status_label_for($ticket['status'], (int)$ticket['departamento_id']);
         return $ticket;
     }
 
@@ -623,13 +625,17 @@ class ANS_Tickets_Routes
                 $params[] = $pri;
             }
         }
-        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, u.display_name AS responsavel_nome FROM {$t} t JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id LEFT JOIN {$u} u ON t.responsavel_id=u.ID";
+        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, u.display_name AS responsavel_nome FROM {$t} t LEFT JOIN {$c} c ON t.cliente_id=c.id LEFT JOIN {$d} d ON t.departamento_id=d.id LEFT JOIN {$u} u ON t.responsavel_id=u.ID";
         if ($where) {
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
         $sql .= ' ORDER BY t.created_at DESC LIMIT 100';
         $prepared = $wpdb->prepare($sql, $params);
-        return $wpdb->get_results($prepared);
+        $rows = $wpdb->get_results($prepared);
+        foreach ($rows as &$row) {
+            $row->status_label = ans_tickets_status_label_for($row->status, (int)$row->departamento_id);
+        }
+        return $rows;
     }
 
     public static function admin_get_ticket(WP_REST_Request $req)
@@ -649,6 +655,7 @@ class ANS_Tickets_Routes
         if (!$ticket) {
             return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
         }
+        $ticket['status_label'] = ans_tickets_status_label_for($ticket['status'], (int)$ticket['departamento_id']);
         $ticket['interacoes'] = $wpdb->get_results($wpdb->prepare(
             "SELECT i.*, u.display_name AS usuario_nome FROM {$i} i LEFT JOIN {$wpdb->users} u ON i.autor_id=u.ID WHERE i.ticket_id=%d ORDER BY i.created_at ASC",
             $id
@@ -1373,26 +1380,38 @@ class ANS_Tickets_Routes
 
         $where = ['t.status=%s'];
         $params = [$status];
+        $filtersWhere = [];
+        $filtersParams = [];
 
         if ($req->get_param('departamento_id')) {
             $where[] = 't.departamento_id=%d';
             $params[] = (int)$req->get_param('departamento_id');
+            $filtersWhere[] = 't.departamento_id=%d';
+            $filtersParams[] = (int)$req->get_param('departamento_id');
         }
         if ($req->get_param('responsavel_id')) {
             $where[] = 't.responsavel_id=%d';
             $params[] = (int)$req->get_param('responsavel_id');
+            $filtersWhere[] = 't.responsavel_id=%d';
+            $filtersParams[] = (int)$req->get_param('responsavel_id');
         }
         if ($req->get_param('prioridade')) {
             $where[] = 't.prioridade=%s';
             $params[] = sanitize_text_field($req->get_param('prioridade'));
+            $filtersWhere[] = 't.prioridade=%s';
+            $filtersParams[] = sanitize_text_field($req->get_param('prioridade'));
         }
         if ($req->get_param('documento')) {
             $where[] = 'c.documento=%s';
             $params[] = preg_replace('/\\D/', '', $req->get_param('documento'));
+            $filtersWhere[] = 'c.documento=%s';
+            $filtersParams[] = preg_replace('/\\D/', '', $req->get_param('documento'));
         }
         if ($req->get_param('protocolo')) {
             $where[] = 't.protocolo=%s';
             $params[] = sanitize_text_field($req->get_param('protocolo'));
+            $filtersWhere[] = 't.protocolo=%s';
+            $filtersParams[] = sanitize_text_field($req->get_param('protocolo'));
         }
 
         $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours
@@ -1406,8 +1425,13 @@ class ANS_Tickets_Routes
         $params[] = $offset;
         $prepared = $wpdb->prepare($sql, $params);
         $items = $wpdb->get_results($prepared);
+        foreach ($items as &$item) {
+            $item->status_label = ans_tickets_status_label_for($item->status, (int)$item->departamento_id);
+        }
 
-        $counts = $wpdb->get_results("SELECT status, COUNT(*) as total FROM {$t} GROUP BY status", ARRAY_A);
+        $whereCounts = $filtersWhere ? ('WHERE ' . implode(' AND ', $filtersWhere)) : '';
+        $countsSql = "SELECT status, COUNT(*) as total FROM {$t} t LEFT JOIN {$c} c ON t.cliente_id=c.id {$whereCounts} GROUP BY status";
+        $counts = $filtersParams ? $wpdb->get_results($wpdb->prepare($countsSql, $filtersParams), ARRAY_A) : $wpdb->get_results($countsSql, ARRAY_A);
 
         return [
             'items' => $items,
@@ -1566,8 +1590,13 @@ class ANS_Tickets_Routes
         global $wpdb;
         $table = ans_tickets_table('status_custom');
         $dep = (int)$req->get_param('departamento_id');
-        $where = $dep ? $wpdb->prepare("WHERE departamento_id=%d", $dep) : '';
-        return $wpdb->get_results("SELECT * FROM {$table} {$where} ORDER BY ordem ASC, nome ASC");
+        if ($dep) {
+            return $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM {$table} WHERE ativo=1 AND (departamento_id=%d OR departamento_id IS NULL) ORDER BY ordem ASC, nome ASC",
+                $dep
+            ));
+        }
+        return $wpdb->get_results("SELECT * FROM {$table} WHERE ativo=1 ORDER BY ordem ASC, nome ASC");
     }
 
     public static function admin_create_status_custom(WP_REST_Request $req)

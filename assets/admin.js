@@ -26,6 +26,10 @@
   const chartSubjects = document.getElementById('ans-chart-subjects');
   const chartSla = document.getElementById('ans-chart-sla');
   const chartAgents = document.getElementById('ans-chart-agents');
+  const refreshBtn = document.getElementById('ans-refresh-btn');
+  const tabBtns = document.querySelectorAll('.ans-tab-btn');
+  const tabTable = document.getElementById('tab-table');
+  const tabKanban = document.getElementById('tab-kanban');
   const BASE_STATUS = [
     'aberto',
     'em_triagem',
@@ -72,6 +76,7 @@
     ouvidoria: 'Ouvidoria'
   };
   let statusOptions = BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)}));
+  let autoRefresh = null;
 
   const statusLabel = (s)=>STATUS_LABELS[s]||labelFromSlug(s);
   function labelFromSlug(s){ return (s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
@@ -145,6 +150,34 @@
     if(docInput) docInput.value = obj.documento||'';
   }
 
+  async function ensureStatuses(departamentoId=null){
+    try{
+      const qs = departamentoId ? `?departamento_id=${departamentoId}` : '';
+      const custom = await fetchJSON(`${api}/admin/status-custom${qs}`,{headers});
+      const mapped = (custom||[]).map(s=>({slug:s.slug,name:s.nome||statusLabel(s.slug)}));
+      const baseSet = new Set(BASE_STATUS);
+      const merged = [
+        ...BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)})),
+        ...mapped.filter(m=>!baseSet.has(m.slug))
+      ];
+      statusOptions = merged;
+      renderStatusSelects();
+    }catch(e){
+      statusOptions = BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)}));
+      renderStatusSelects();
+    }
+  }
+
+  function renderStatusSelects(){
+    if(statusSelect){
+      statusSelect.innerHTML = '<option value=\"\">Todos</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+    }
+    const updateStatus = document.getElementById('update-status');
+    if(updateStatus){
+      updateStatus.innerHTML = '<option value=\"\">Status</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+    }
+  }
+
   async function loadTickets(){
     if(!listEl) return;
     const params = new URLSearchParams();
@@ -154,9 +187,21 @@
     if(priFilter && priFilter.value) params.set('prioridade', priFilter.value);
     if(protoInput.value) params.set('protocolo', protoInput.value);
     if(docInput.value) params.set('documento', docInput.value);
-    const data = await fetchJSON(`${api}/admin/tickets?${params.toString()}`,{headers});
-    renderList(data);
-    renderActiveChips();
+    try{
+      const data = await fetchJSON(`${api}/admin/tickets?${params.toString()}`,{headers});
+      renderList(data);
+      renderActiveChips();
+    }catch(e){
+      if(listEl){ listEl.innerHTML = `<li class=\"empty-row\">Erro ao carregar chamados: ${e.message||''}</li>`; }
+    }
+  }
+
+  function startAutoRefresh(){
+    stopAutoRefresh();
+    autoRefresh = setInterval(()=>{ loadTickets(); }, 30000);
+  }
+  function stopAutoRefresh(){
+    if(autoRefresh){ clearInterval(autoRefresh); autoRefresh=null; }
   }
 
   function renderList(items){
@@ -181,6 +226,7 @@
       const unassigned = !t.responsavel_id;
       const respLabel = t.responsavel_nome || 'Sem atendente';
       const updatedText = formatDate(t.updated_at);
+      const label = t.status_label || statusLabel(t.status);
       li.innerHTML=`
         <div class="card-top">
           <div class="proto-block">
@@ -188,7 +234,7 @@
             <div class="proto-time">${formatDate(t.created_at)}</div>
           </div>
           <div class="status-block">
-            <span class="ans-badge ans-status ans-status-${statusCls}">${statusLabel(t.status)}</span>
+            <span class="ans-badge ans-status ans-status-${statusCls}">${label}</span>
             <span class="ans-priority-badge ${priClass}">${priorityLabel(t.prioridade)}</span>
           </div>
         </div>
@@ -240,6 +286,7 @@
     highlightList();
     if(!detailEl) return;
     const t = await fetchJSON(`${api}/admin/tickets/${id}`,{headers});
+    await ensureStatuses(t.departamento_id||null);
     const replies = await getQuickReplies(t.departamento_id);
     renderDetail(t, replies);
   }
@@ -322,6 +369,7 @@
 
   function renderDetail(t, quickData){
     const statusCls = (t.status||'').toLowerCase().replace(/[^a-z0-9_]/g,'-');
+    const statusText = t.status_label || statusLabel(t.status);
     const priClass = t.prioridade==='alta'?'pri-alta':(t.prioridade==='baixa'?'pri-baixa':'pri-media');
     const blocks = [
       {label:'Globais', items: quickData?.globais||[]},
@@ -346,7 +394,7 @@
         <div>
           <div class="ans-ticket-title">[#${t.protocolo}] ${t.assunto||'-'}</div>
           <div class="ans-ticket-meta">
-            <span class="ans-badge ans-status ans-status-${statusCls}">${statusLabel(t.status)}</span>
+            <span class="ans-badge ans-status ans-status-${statusCls}">${statusText}</span>
             <span class="ans-priority-badge ${priClass}">${priText}</span>
             <span class="ans-badge ghost">Depto: ${depName}</span>
             <span class="ans-badge ghost">Atualizado ${formatDate(t.updated_at)}</span>
@@ -645,6 +693,7 @@
     if(agentFilter){
       agentFilter.innerHTML = '<option value=\"\">Todos</option>' + agentsCache.map(a=>`<option value=\"${a.id}\">${a.name}</option>`).join('');
     }
+    renderStatusSelects();
   }
 
   const applyBtn = document.getElementById('apply-filters');
@@ -664,13 +713,39 @@
     Promise.all([
       fetchJSON(`${api}/admin/agents`,{headers}).then(res=>{agentsCache=res||[];}).catch(()=>{agentsCache=[];}),
       fetchJSON(`${api}/admin/departamentos`,{headers}).then(res=>{depCache=res||[];}).catch(()=>{depCache=[];}),
-      loadSavedFilters()
+      loadSavedFilters(),
+      ensureStatuses()
     ]).finally(()=>{
       setupFilterUI();
       populateFilterSelects();
       renderActiveChips();
       renderSavedChips();
       loadTickets();
+      startAutoRefresh();
+    });
+  }
+
+  if(refreshBtn){
+    refreshBtn.addEventListener('click', ()=>{ loadTickets(); startAutoRefresh(); });
+  }
+
+  if(tabBtns.length){
+    tabBtns.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        tabBtns.forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        if(tab==='kanban'){
+          if(tabTable) tabTable.style.display='none';
+          if(tabKanban) tabKanban.style.display='block';
+          stopAutoRefresh();
+          if(window.ansKanbanReload){ window.ansKanbanReload(); }
+        }else{
+          if(tabTable) tabTable.style.display='grid';
+          if(tabKanban) tabKanban.style.display='none';
+          startAutoRefresh();
+        }
+      });
     });
   }
 

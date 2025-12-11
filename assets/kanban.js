@@ -1,8 +1,11 @@
 (function(){
   const api = (window.ANS_TICKETS_KANBAN && ANS_TICKETS_KANBAN.api) || '';
   const nonce = ANS_TICKETS_KANBAN?.nonce || '';
+  const baseFallback = ['novo','em_andamento','resolvido','nao_resolvido'].map(s=>({slug:s,name:labelFromSlug(s)}));
   const defaultStatuses = (ANS_TICKETS_KANBAN?.status || []).map(s=>({slug:s,name:labelFromSlug(s)}));
-  let statuses = [...defaultStatuses];
+  let statuses = [];
+  let agentsCache = [];
+  let depCache = [];
   const board = document.getElementById('kanban-board');
   const filters = {
     status: document.getElementById('kanban-filter-status'),
@@ -40,6 +43,12 @@
     const d = Math.floor(diffH/24);
     return d+'d';
   }
+  function formatDate(val){
+    if(!val) return '-';
+    const date = new Date(val.replace(' ','T'));
+    if(Number.isNaN(date.getTime())) return val;
+    return date.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  }
 
   function slaPct(created, slaHours){
     if(!slaHours) return 0;
@@ -56,6 +65,7 @@
     card.draggable = true;
     card.dataset.id = item.id;
     card.dataset.status = item.status;
+    const label = item.status_label || labelFromSlug(item.status);
     card.innerHTML = `
       <div class="kanban-top">
         <div class="proto">#${item.protocolo}</div>
@@ -63,6 +73,7 @@
       </div>
       <div class="client">${item.nome_completo||''}</div>
       <div class="meta">${item.departamento_nome||'-'} • ${humanTime(item.created_at)}</div>
+      <div class="status-pill">${label}</div>
       <div class="sla"><span style="width:${pct}%"></span></div>
     `;
     card.addEventListener('dragstart', (ev)=>{
@@ -71,6 +82,7 @@
       setTimeout(()=>card.classList.add('dragging'),0);
     });
     card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    card.addEventListener('click', ()=>openDetail(item.id));
     return card;
   }
 
@@ -116,7 +128,9 @@
         body: JSON.stringify({status})
       });
       reloadBoard();
-    }catch(err){ alert(err.message); }
+    }catch(err){
+      alert(err.message||'Erro ao atualizar status');
+    }
   }
 
   function currentFilters(){
@@ -176,16 +190,18 @@
   async function populateSelects(){
     try{
       const deps = await fetchJSON(`${api}/admin/departamentos`,{headers: headers(false)});
+      depCache = deps||[];
       if(filters.dep){
-        filters.dep.innerHTML='<option value=\"\">Departamento</option>'+deps.map(d=>`<option value=\"${d.id}\">${d.nome}</option>`).join('');
+        filters.dep.innerHTML='<option value=\"\">Departamento</option>'+depCache.map(d=>`<option value=\"${d.id}\">${d.nome}</option>`).join('');
       }
-    }catch(e){}
+    }catch(e){ depCache=[]; }
     try{
       const agents = await fetchJSON(`${api}/admin/agents`,{headers: headers(false)});
+      agentsCache = agents||[];
       if(filters.resp){
-        filters.resp.innerHTML='<option value=\"\">Responsável</option>'+agents.map(a=>`<option value=\"${a.id}\">${a.name}</option>`).join('');
+        filters.resp.innerHTML='<option value=\"\">Responsável</option>'+agentsCache.map(a=>`<option value=\"${a.id}\">${a.name}</option>`).join('');
       }
-    }catch(e){}
+    }catch(e){ agentsCache=[]; }
   }
 
   function updateStatusFilter(){
@@ -199,11 +215,178 @@
       const qs = depId ? `?departamento_id=${depId}` : '';
       const res = await fetchJSON(`${api}/admin/status-custom${qs}`,{headers: headers(false)});
       const arr = (res||[]).map(r=>({slug:r.slug,name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
-      statuses = arr.length ? arr : [...defaultStatuses];
+      if(arr.length){
+        statuses = arr;
+      }else{
+        // tenta globais sem depto
+        const global = await fetchJSON(`${api}/admin/status-custom`,{headers: headers(false)}).catch(()=>[]);
+        const arrGlobal = (global||[]).map(r=>({slug:r.slug,name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
+        statuses = arrGlobal.length ? arrGlobal : (defaultStatuses.length ? defaultStatuses : baseFallback);
+      }
     }catch(e){
-      statuses = [...defaultStatuses];
+      statuses = defaultStatuses.length ? defaultStatuses : baseFallback;
     }
     updateStatusFilter();
+  }
+
+  let detailHost = null;
+  let currentTicketId = null;
+
+  function ensureDetailHost(){
+    if(detailHost) return detailHost;
+    detailHost = document.createElement('div');
+    detailHost.id = 'kanban-detail';
+    const container = document.getElementById('ans-kanban');
+    if(container){
+      container.appendChild(detailHost);
+    }else{
+      document.body.appendChild(detailHost);
+    }
+    return detailHost;
+  }
+
+  function renderHistory(interacoes, anexos){
+    if(!interacoes || !interacoes.length) return '<p class="muted">Sem histórico.</p>';
+    const map = {};
+    (anexos||[]).forEach(a=>{
+      const key = a.interacao_id || 'ticket';
+      if(!map[key]) map[key]=[];
+      map[key].push(a);
+    });
+    let lastDate='';
+    return '<div class="ans-chat-timeline">'+interacoes.map(i=>{
+      const day = (i.created_at||'').split(' ')[0];
+      let header = '';
+      if(day && day!==lastDate){
+        lastDate = day;
+        header = `<div class="ans-date-sep">${day}</div>`;
+      }
+      const who = i.autor_tipo==='cliente' ? 'Beneficiário' : 'Atendente';
+      const cls = i.interno ? 'internal' : (i.autor_tipo==='cliente'?'client':'agent');
+      const attach = map[i.id]||[];
+      const attachHtml = attach.length ? `<div class="attach-row">${attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'}</a>`).join('<br>')}</div>` : '';
+      return `${header}<div class="chat-bubble ${cls}"><div class="chat-head"><span>${who}</span><span>${formatDate(i.created_at)}</span></div><div class="chat-body">${i.mensagem||''}</div>${attachHtml}</div>`;
+    }).join('') + '</div>';
+  }
+
+  async function openDetail(id){
+    currentTicketId = id;
+    const host = ensureDetailHost();
+    host.innerHTML = '<div class="detail-card">Carregando chamado...</div>';
+    try{
+      const t = await fetchJSON(`${api}/admin/tickets/${id}`,{headers: headers(false)});
+      const statusOptions = statuses.map(s=>`<option value="${s.slug}" ${s.slug===t.status?'selected':''}>${s.name}</option>`).join('');
+      const depOptions = depCache.map(d=>`<option value="${d.id}" ${d.id===t.departamento_id?'selected':''}>${d.nome}</option>`).join('');
+      const agentOptions = ['<option value="">Sem responsável</option>'].concat(agentsCache.map(a=>`<option value="${a.id}" ${a.id===t.responsavel_id?'selected':''}>${a.name}</option>`)).join('');
+      const priOptions = ['baixa','media','alta'].map(p=>`<option value="${p}" ${p===t.prioridade?'selected':''}>${p}</option>`).join('');
+      const history = renderHistory(t.interacoes||[], t.anexos||[]);
+      host.innerHTML = `
+        <div class="detail-card">
+          <div class="detail-head">
+            <div>
+              <div class="title">[#${t.protocolo}] ${t.assunto||''}</div>
+              <div class="meta">${t.nome_completo||''} • ${t.departamento_nome||'-'} • Atualizado ${formatDate(t.updated_at)}</div>
+            </div>
+            <button class="btn ghost" id="detail-close">Fechar</button>
+          </div>
+          <div class="detail-grid">
+            <div class="left">
+              <div class="card">
+                <div class="card-title">Histórico</div>
+                <div class="timeline">${history}</div>
+              </div>
+              <div class="card">
+                <div class="card-title">Responder</div>
+                <textarea id="detail-reply" placeholder="Digite sua resposta..."></textarea>
+                <div class="actions-row">
+                  <button class="btn success" id="detail-send">Enviar ao cliente</button>
+                  <button class="btn warn" id="detail-note">Nota interna</button>
+                </div>
+              </div>
+            </div>
+            <div class="right">
+              <div class="card">
+                <div class="card-title">Ações</div>
+                <label>Status<select id="detail-status">${statusOptions}</select></label>
+                <label>Departamento<select id="detail-dep">${depOptions}</select></label>
+                <label>Prioridade<select id="detail-pri">${priOptions}</select></label>
+                <label>Responsável<select id="detail-resp">${agentOptions}</select></label>
+                <div class="actions-row">
+                  <button class="btn primary" id="detail-save">Aplicar</button>
+                  <button class="btn info" id="detail-transfer">Transferir depto</button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-title">Anexos do atendente</div>
+                <input type="file" id="detail-upload">
+                <button class="btn" id="detail-upload-btn">Anexar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      host.querySelector('#detail-close').onclick = ()=>{ host.innerHTML=''; };
+      host.querySelector('#detail-send').onclick = ()=>sendReply(t.id,false);
+      host.querySelector('#detail-note').onclick = ()=>sendReply(t.id,true);
+      host.querySelector('#detail-save').onclick = ()=>saveCombined(t.id);
+      host.querySelector('#detail-transfer').onclick = ()=>transferTicket(t.id);
+      host.querySelector('#detail-upload-btn').onclick = (ev)=>{ev.preventDefault();uploadFile(t.id);};
+    }catch(e){
+      host.innerHTML = `<div class="detail-card error">Erro ao carregar: ${e.message||''}</div>`;
+    }
+  }
+
+  async function sendReply(id, interno=false){
+    const msgEl = detailHost?.querySelector('#detail-reply');
+    if(!msgEl) return;
+    const msg = msgEl.value.trim();
+    if(!msg){ alert('Mensagem obrigatória'); return; }
+    try{
+      await fetchJSON(`${api}/admin/tickets/${id}/reply`,{method:'POST',headers: headers(),body: JSON.stringify({mensagem:msg, interno})});
+      msgEl.value='';
+      await openDetail(id);
+      reloadBoard();
+    }catch(e){ alert(e.message||'Erro ao responder'); }
+  }
+
+  async function saveCombined(id){
+    const status = detailHost?.querySelector('#detail-status')?.value;
+    const dep = detailHost?.querySelector('#detail-dep')?.value;
+    const pri = detailHost?.querySelector('#detail-pri')?.value;
+    const resp = detailHost?.querySelector('#detail-resp')?.value;
+    const payload={};
+    if(status) payload.status=status;
+    if(dep) payload.departamento_id=parseInt(dep,10);
+    if(pri) payload.prioridade=pri;
+    if(resp) payload.responsavel_id=parseInt(resp,10);
+    if(!Object.keys(payload).length){ alert('Nada para salvar'); return; }
+    try{
+      await fetchJSON(`${api}/admin/tickets/${id}`,{method:'PATCH',headers: headers(),body: JSON.stringify(payload)});
+      await openDetail(id);
+      reloadBoard();
+    }catch(e){ alert(e.message||'Erro ao salvar'); }
+  }
+
+  async function transferTicket(id){
+    const dep = detailHost?.querySelector('#detail-dep')?.value;
+    if(!dep){ alert('Selecione o departamento destino'); return; }
+    try{
+      await fetchJSON(`${api}/admin/tickets/${id}/transfer`,{method:'POST',headers: headers(),body: JSON.stringify({departamento_id:parseInt(dep,10)})});
+      await openDetail(id);
+      reloadBoard();
+    }catch(e){ alert(e.message||'Erro ao transferir'); }
+  }
+
+  async function uploadFile(id){
+    const input = detailHost?.querySelector('#detail-upload');
+    if(!input || !input.files.length){ alert('Selecione um arquivo'); return; }
+    const fd = new FormData();
+    fd.append('file', input.files[0]);
+    fd.append('ticket_id', id);
+    const res = await fetch(`${api}/admin/upload`,{method:'POST',headers:{'X-WP-Nonce':nonce},body:fd});
+    const json = await res.json();
+    if(!res.ok){ alert(json.error||'Erro no upload'); return; }
+    await openDetail(id);
   }
 
   async function init(){
@@ -231,5 +414,8 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', ()=>{
+    init();
+    window.ansKanbanReload = reloadBoard;
+  });
 })();

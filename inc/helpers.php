@@ -79,6 +79,60 @@ function ans_tickets_custom_statuses(): array
     }, $rows);
 }
 
+function ans_tickets_status_label_for(string $slug, ?int $departamento_id = null): string
+{
+    global $wpdb;
+    $slug = sanitize_title($slug);
+    $table = ans_tickets_table('status_custom');
+    if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
+        $name = null;
+        if ($departamento_id) {
+            $name = $wpdb->get_var($wpdb->prepare(
+                "SELECT nome FROM {$table} WHERE slug=%s AND departamento_id=%d AND ativo=1 LIMIT 1",
+                $slug,
+                $departamento_id
+            ));
+        }
+        if (!$name) {
+            $name = $wpdb->get_var($wpdb->prepare(
+                "SELECT nome FROM {$table} WHERE slug=%s AND departamento_id IS NULL AND ativo=1 LIMIT 1",
+                $slug
+            ));
+        }
+        if ($name) {
+            return $name;
+        }
+    }
+    $map = [
+        'aberto' => 'Aberto',
+        'em_triagem' => 'Em Triagem',
+        'aguardando_informacoes_solicitante' => 'Aguardando Informações do Solicitante',
+        'em_analise' => 'Em Análise',
+        'em_execucao' => 'Em Atendimento / Execução',
+        'aguardando_terceiros' => 'Aguardando Terceiros',
+        'aguardando_aprovacao' => 'Aguardando Aprovação',
+        'solucao_proposta' => 'Solução Proposta',
+        'resolvido' => 'Resolvido',
+        'fechado' => 'Fechado',
+        'aguardando_acao' => 'Aguardando Ação',
+        // legados (sem sufixo legado para UX limpa)
+        'novo' => 'Aberto',
+        'atendimento' => 'Em Atendimento',
+        'pendente_cliente' => 'Aguardando Cliente',
+        'concluido' => 'Concluído',
+        'arquivado' => 'Arquivado',
+        'financeiro' => 'Financeiro',
+        'comercial' => 'Comercial',
+        'assistencial' => 'Assistencial',
+        'ouvidoria' => 'Ouvidoria',
+    ];
+    if (isset($map[$slug])) {
+        return $map[$slug];
+    }
+    $slug = str_replace('_', ' ', $slug);
+    return ucwords($slug);
+}
+
 function ans_tickets_statuses(): array
 {
     $base = [

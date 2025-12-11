@@ -12,12 +12,12 @@
     resolvido: 'Resolvido',
     fechado: 'Fechado',
     aguardando_acao: 'Aguardando Ação',
-    // legados
-    novo: 'Aberto (legado)',
-    atendimento: 'Em Atendimento (legado)',
-    pendente_cliente: 'Aguardando Cliente (legado)',
-    concluido: 'Concluído (legado)',
-    arquivado: 'Arquivado (legado)',
+    // legados (sem sufixo legado)
+    novo: 'Aberto',
+    atendimento: 'Em Atendimento',
+    pendente_cliente: 'Aguardando Cliente',
+    concluido: 'Concluído',
+    arquivado: 'Arquivado',
     financeiro: 'Financeiro',
     comercial: 'Comercial',
     assistencial: 'Assistencial',
@@ -25,19 +25,38 @@
   };
   const tokens = {};
 
+  function maskPhone(input, mobile){
+    const digits = (input.value || '').replace(/\D/g,'').slice(0, mobile ? 11 : 10);
+    if(!digits){ input.value=''; return; }
+    if(mobile){
+      // (99) 9 9999-9999
+      const d = digits.padEnd(11,' ');
+      input.value = `(${d.slice(0,2)}) ${d.slice(2,3)} ${d.slice(3,7)}-${d.slice(7,11)}`.trim();
+    }else{
+      // (99) 9999-9999
+      const d = digits.padEnd(10,' ');
+      input.value = `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6,10)}`.trim();
+    }
+  }
+
   function serialize(form){
     const data = {};
     new FormData(form).forEach((v,k)=>{data[k]=v});
     return data;
   }
 
-  function statusLabel(key){
-    return STATUS_LABELS[key] || key || '';
+  function statusLabel(key, custom){
+    if(custom) return custom;
+    return STATUS_LABELS[key] || labelFromSlug(key);
+  }
+  function labelFromSlug(slug){
+    if(!slug) return '';
+    return slug.toString().replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   }
 
-  function statusBadge(key){
+  function statusBadge(key, custom){
     const cls = key ? key.toString().toLowerCase().replace(/[^a-z0-9_]/g,'-') : 'na';
-    return '<span class="ans-badge ans-status ans-status-'+cls+'">'+statusLabel(key)+'</span>';
+    return '<span class="ans-badge ans-status ans-status-'+cls+'">'+statusLabel(key, custom)+'</span>';
   }
 
   async function loadDepartamentos(){
@@ -84,6 +103,10 @@
         if(input){ input.required = isCliente; }
       });
     }
+    const telInput = form.querySelector('input[name="telefone"]');
+    const waInput = form.querySelector('input[name="whatsapp"]');
+    if(telInput){ telInput.addEventListener('input', ()=>maskPhone(telInput,false)); }
+    if(waInput){ waInput.required = true; waInput.addEventListener('input', ()=>maskPhone(waInput,true)); }
     const depSelect = document.getElementById('ans-departamento');
     if(depSelect){
       depSelect.addEventListener('change', ()=>loadAssuntosByDep(depSelect.value));
@@ -175,7 +198,7 @@
     if(token){ tokens[ticket.protocolo] = token; }
     let html = '<div class="ans-ticket-head">';
     html += '<div><h4>[#'+ticket.protocolo+'] '+(ticket.assunto||'')+'</h4>';
-    html += '<div class="ans-ticket-meta">'+statusBadge(ticket.status)+' • Criado em '+(ticket.created_at||'')+' • '+(ticket.departamento_nome||'')+'</div>';
+    html += '<div class="ans-ticket-meta">'+statusBadge(ticket.status, ticket.status_label)+' • Criado em '+(ticket.created_at||'')+' • '+(ticket.departamento_nome||'')+'</div>';
     html += '</div></div>';
     html += '<div class="ans-ticket-desc">'+ticket.descricao+'</div>';
     html += '<div class="ans-thread-wrap">';
