@@ -1,9 +1,9 @@
-# ANS Tickets (Uniodonto) – v0.6.2
+# ANS Tickets (Uniodonto) – v0.6.3
 
 Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-end para beneficiários e painel (wp-admin ou página pública) para atendentes.
 
 ## Funcionalidades
-- **Formulário público** `[ans_ticket_form]`: abre chamado com dados do beneficiário (nome, email, telefone, WhatsApp, documento, data de nascimento se cliente Uniodonto), seleção de departamento e assuntos ligados ao departamento (carregados via API), descrição, campos de Ouvidoria (protocolo anterior + aviso) e Assistencial/Atendimento (tipo de procedimento, prestador, data do evento, número de guia). Exibe protocolo gerado na hora.
+- **Formulário público** `[ans_ticket_form]`: abre chamado com dados do beneficiário (nome, email, telefone, WhatsApp, documento, data de nascimento se cliente Uniodonto), seleção de departamento e assuntos ligados ao departamento (carregados via API), descrição, campos de Ouvidoria (protocolo anterior + aviso) e Assistencial/Atendimento (tipo de procedimento, prestador, data do evento, número de guia). Exibe protocolo gerado na hora. Usa o status inicial definido pelos administradores (custom) quando existir.
 - **Acompanhar/recuperar** `[ans_ticket_track]`: 
   - Com protocolo: login rápido (protocolo + CPF/CNPJ) gera token de 1h, mostra detalhes, histórico e permite responder.
   - Sem protocolo: CPF + data de nascimento → lista todos os chamados do cliente e abre cada um.
@@ -62,7 +62,7 @@ Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-en
 
 ## REST (resumo)
 - Público: `POST /tickets`, `POST /login`, `GET /tickets/{protocolo}`, `POST /tickets/{protocolo}/messages`, `POST /tickets/recover`, `GET /departamentos`, `GET /departamentos/{id}/assuntos`.
-- Admin/atendente: `GET/POST /admin/departamentos`, `GET /admin/departamentos/{id}`, `PUT/DELETE /admin/departamentos/{id}`, `GET /admin/tickets`, `GET/PATCH /admin/tickets/{id}`, `POST /admin/tickets/{id}/reply`, `POST /admin/tickets/{id}/transfer`, `POST /admin/upload`, `GET/POST /admin/settings`, `GET /admin/stats`, `GET /admin/agents`, `GET/POST /admin/respostas-rapidas`, `PUT/DELETE /admin/respostas-rapidas/{id}`, `GET/POST /admin/filtros-salvos`, `PUT/DELETE /admin/filtros-salvos/{id}`, `GET/POST /admin/kanban/filters`, `GET /admin/kanban/tickets`, `GET /admin/reports/v2`, `GET/POST /admin/assuntos`, `PUT/DELETE /admin/assuntos/{id}`, `GET/POST /admin/status-custom`, `PUT/DELETE /admin/status-custom/{id}`.
+- Admin/atendente: `GET/POST /admin/departamentos`, `GET /admin/departamentos/{id}`, `PUT/DELETE /admin/departamentos/{id}`, `GET /admin/tickets`, `GET/PATCH /admin/tickets/{id}`, `POST /admin/tickets/{id}/reply`, `POST /admin/tickets/{id}/transfer`, `POST /admin/upload`, `GET/POST /admin/settings`, `GET /admin/stats`, `GET /admin/agents`, `GET/POST /admin/respostas-rapidas`, `PUT/DELETE /admin/respostas-rapidas/{id}`, `GET/POST /admin/filtros-salvos`, `PUT/DELETE /admin/filtros-salvos/{id}`, `GET/POST /admin/kanban/filters`, `GET /admin/kanban/tickets`, `GET /admin/reports/v2`, `GET/POST /admin/assuntos`, `PUT/DELETE /admin/assuntos/{id}`, `GET/POST /admin/status-custom` (com flags inicial/final resolvido/final não resolvido), `PUT/DELETE /admin/status-custom/{id}`.
 - Autenticação: beneficiário via token emitido em `/login`; atendente via login WP + nonce para rotas admin.
 
 ## Banco de dados
@@ -79,4 +79,4 @@ Tabelas personalizadas: `ans_operadora`, `ans_departamentos`, `ans_clientes` (wh
 - Cron de SLA a cada 5 minutos: muda status para `aguardando_acao`, cria nota interna e notifica responsável.
 
 ## Versão
-- Atual: **0.6.2**
+- Atual: **0.6.3**

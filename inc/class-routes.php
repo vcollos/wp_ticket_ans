@@ -50,6 +50,30 @@ class ANS_Tickets_Routes
             'permission_callback' => '__return_true',
         ]);
 
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos', [
+            'methods' => 'GET',
+            'callback' => [self::class, 'admin_list_assuntos'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'admin_create_assunto'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/assuntos/(?P<id>\\d+)', [
+            'methods' => ['PUT', 'DELETE'],
+            'callback' => [self::class, 'admin_update_assunto'],
+            'permission_callback' => function () {
+                return ans_tickets_can_manage();
+            },
+        ]);
+
         // Admin / Atendente
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/departamentos', [
             'methods' => 'GET',
@@ -374,20 +398,20 @@ class ANS_Tickets_Routes
             // Protocolo
             $protocolo = ans_tickets_protocol();
 
-            $inserted = $wpdb->insert($table_tickets, [
-                'protocolo' => $protocolo,
-                'cliente_id' => $cliente_id,
-                'assunto' => $assunto,
-                'descricao' => wp_kses_post($req->get_param('descricao')),
-                'departamento_id' => $departamento_id,
-                'status' => 'aberto',
-                'prioridade' => 'media',
-                'ticket_origem' => $req->get_param('ticket_origem') ? sanitize_text_field($req->get_param('ticket_origem')) : null,
-                'tipo_de_procedimento' => sanitize_text_field($req->get_param('tipo_de_procedimento')),
-                'prestador' => sanitize_text_field($req->get_param('prestador')),
-                'data_evento' => $req->get_param('data_evento'),
-                'numero_guia' => sanitize_text_field($req->get_param('numero_guia')),
-            ]);
+        $inserted = $wpdb->insert($table_tickets, [
+            'protocolo' => $protocolo,
+            'cliente_id' => $cliente_id,
+            'assunto' => $assunto,
+            'descricao' => wp_kses_post($req->get_param('descricao')),
+            'departamento_id' => $departamento_id,
+            'status' => ans_tickets_initial_status($departamento_id),
+            'prioridade' => 'media',
+            'ticket_origem' => $req->get_param('ticket_origem') ? sanitize_text_field($req->get_param('ticket_origem')) : null,
+            'tipo_de_procedimento' => sanitize_text_field($req->get_param('tipo_de_procedimento')),
+            'prestador' => sanitize_text_field($req->get_param('prestador')),
+            'data_evento' => $req->get_param('data_evento'),
+            'numero_guia' => sanitize_text_field($req->get_param('numero_guia')),
+        ]);
             
             if ($inserted === false) {
                 throw new Exception('Erro ao inserir ticket: ' . $wpdb->last_error);
@@ -1563,10 +1587,15 @@ class ANS_Tickets_Routes
             'cor' => sanitize_text_field($req->get_param('cor')),
             'ordem' => (int)$req->get_param('ordem'),
             'ativo' => 1,
+            'inicial' => $req->get_param('inicial') ? 1 : 0,
+            'final_resolvido' => $req->get_param('final_resolvido') ? 1 : 0,
+            'final_nao_resolvido' => $req->get_param('final_nao_resolvido') ? 1 : 0,
         ]);
         if ($insert === false) {
             return new WP_REST_Response(['error' => 'Erro ao criar status: ' . $wpdb->last_error], 500);
         }
+        $id = $wpdb->insert_id;
+        self::reset_status_flags($id, $dep, $req);
         return ['id' => $wpdb->insert_id];
     }
 
@@ -1598,6 +1627,15 @@ class ANS_Tickets_Routes
         if ($req->get_param('departamento_id') !== null) {
             $data['departamento_id'] = (int)$req->get_param('departamento_id');
         }
+        if ($req->get_param('inicial') !== null) {
+            $data['inicial'] = $req->get_param('inicial') ? 1 : 0;
+        }
+        if ($req->get_param('final_resolvido') !== null) {
+            $data['final_resolvido'] = $req->get_param('final_resolvido') ? 1 : 0;
+        }
+        if ($req->get_param('final_nao_resolvido') !== null) {
+            $data['final_nao_resolvido'] = $req->get_param('final_nao_resolvido') ? 1 : 0;
+        }
         if (empty($data)) {
             return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
         }
@@ -1605,6 +1643,23 @@ class ANS_Tickets_Routes
         if ($ok === false) {
             return new WP_REST_Response(['error' => 'Erro ao atualizar status'], 500);
         }
+        self::reset_status_flags($id, $req->get_param('departamento_id') ? (int)$req->get_param('departamento_id') : null, $req);
         return ['status' => 'ok'];
+    }
+
+    private static function reset_status_flags(int $id, ?int $departamento_id, WP_REST_Request $req): void
+    {
+        global $wpdb;
+        $table = ans_tickets_table('status_custom');
+        $depWhere = $departamento_id ? $wpdb->prepare("= %d", $departamento_id) : "IS NULL";
+        if ($req->get_param('inicial')) {
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET inicial=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+        }
+        if ($req->get_param('final_resolvido')) {
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET final_resolvido=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+        }
+        if ($req->get_param('final_nao_resolvido')) {
+            $wpdb->query($wpdb->prepare("UPDATE {$table} SET final_nao_resolvido=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+        }
     }
 }

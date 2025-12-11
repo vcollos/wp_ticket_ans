@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.6.2
+ * Version: 0.6.3
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.6.2');
+define('ANS_TICKETS_VERSION', '0.6.3');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));

@@ -107,3 +107,22 @@ function ans_tickets_statuses(): array
     $custom = ans_tickets_custom_statuses();
     return array_values(array_unique(array_merge($base, $custom)));
 }
+
+function ans_tickets_initial_status(?int $departamento_id = null): string
+{
+    global $wpdb;
+    $table = ans_tickets_table('status_custom');
+    if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
+        $slug = null;
+        if ($departamento_id) {
+            $slug = $wpdb->get_var($wpdb->prepare("SELECT slug FROM {$table} WHERE inicial=1 AND ativo=1 AND departamento_id=%d ORDER BY ordem ASC LIMIT 1", $departamento_id));
+        }
+        if (!$slug) {
+            $slug = $wpdb->get_var("SELECT slug FROM {$table} WHERE inicial=1 AND ativo=1 AND departamento_id IS NULL ORDER BY ordem ASC LIMIT 1");
+        }
+        if ($slug) {
+            return $slug;
+        }
+    }
+    return 'aberto';
+}

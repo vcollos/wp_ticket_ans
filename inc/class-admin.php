@@ -259,6 +259,9 @@ class ANS_Tickets_Admin
                         <input type="text" id="ans-status-slug" class="regular-text" placeholder="slug">
                         <input type="color" id="ans-status-cor" value="#a60069">
                         <input type="number" id="ans-status-ordem" class="small-text" placeholder="Ordem">
+                        <label><input type="checkbox" id="ans-status-inicial"> Inicial</label>
+                        <label><input type="checkbox" id="ans-status-final-ok"> Final Resolvido</label>
+                        <label><input type="checkbox" id="ans-status-final-nok"> Final Não Resolvido</label>
                         <button id="ans-status-save" class="button button-primary">Salvar</button>
                     </div>
                     <ul id="ans-status-list"></ul>
@@ -552,14 +555,17 @@ class ANS_Tickets_Admin
                     const slug = $('#ans-status-slug').val();
                     const cor = $('#ans-status-cor').val();
                     const ordem = parseInt($('#ans-status-ordem').val(),10) || 0;
+                    const inicial = $('#ans-status-inicial').is(':checked');
+                    const finalOk = $('#ans-status-final-ok').is(':checked');
+                    const finalNok = $('#ans-status-final-nok').is(':checked');
                     if(!nome || !slug){ alert('Informe nome e slug'); return; }
                     $.ajax({
                         url: ANS_TICKETS_ADMIN.api + '/admin/status-custom',
                         method:'POST',
                         headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
-                        data: JSON.stringify({departamento_id: dep||null, nome, slug, cor, ordem}),
+                        data: JSON.stringify({departamento_id: dep||null, nome, slug, cor, ordem, inicial, final_resolvido: finalOk, final_nao_resolvido: finalNok}),
                         contentType:'application/json',
-                        success:function(){ $('#ans-status-nome').val(''); $('#ans-status-slug').val(''); loadStatus(dep); },
+                        success:function(){ $('#ans-status-nome').val(''); $('#ans-status-slug').val(''); $('#ans-status-inicial,#ans-status-final-ok,#ans-status-final-nok').prop('checked',false); loadStatus(dep); },
                         error:function(xhr){ alert(xhr.responseJSON?.error||'Erro'); }
                     });
                 });
@@ -574,7 +580,14 @@ class ANS_Tickets_Admin
                     headers:{'X-WP-Nonce':ANS_TICKETS_ADMIN.nonce},
                     success:function(rows){
                         if(!rows.length){ $('#ans-status-list').html('<li>Nenhum status custom.</li>'); return; }
-                        const html = rows.map(r=>'<li data-id="'+r.id+'"><span style="display:inline-block;width:12px;height:12px;background:'+ (r.cor||'#ccc') +';border-radius:50%;margin-right:6px"></span>'+r.nome+' ('+r.slug+') <button class="button-link ans-del-status" data-id="'+r.id+'">Excluir</button></li>').join('');
+                        const html = rows.map(r=>{
+                            const flags = [
+                                r.inicial ? 'Inicial' : '',
+                                r.final_resolvido ? 'Final Resolvido' : '',
+                                r.final_nao_resolvido ? 'Final Não Resolvido' : ''
+                            ].filter(Boolean).join(' • ');
+                            return '<li data-id="'+r.id+'"><span style="display:inline-block;width:12px;height:12px;background:'+ (r.cor||'#ccc') +';border-radius:50%;margin-right:6px"></span>'+r.nome+' ('+r.slug+') '+(flags?'<em>['+flags+']</em>':'')+' <button class="button-link ans-del-status" data-id="'+r.id+'">Excluir</button></li>';
+                        }).join('');
                         $('#ans-status-list').html(html);
                     }
                 });

@@ -346,7 +346,7 @@
     }
     const depSelect = document.getElementById('ans-departamento');
     if(depSelect){
-        depSelect.addEventListener('change', toggleAssistFields);
+        depSelect.addEventListener('change', ()=>{ toggleAssistFields(); loadAssuntosByDep(depSelect.value); });
     }
   });
 })();
