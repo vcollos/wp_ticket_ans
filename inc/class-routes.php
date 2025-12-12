@@ -703,12 +703,30 @@ class ANS_Tickets_Routes
     public static function admin_reply_ticket(WP_REST_Request $req)
     {
         global $wpdb;
+        $t = ans_tickets_table('tickets');
+        $ticket = $wpdb->get_row($wpdb->prepare("SELECT responsavel_id FROM {$t} WHERE id=%d", (int)$req['id']), ARRAY_A);
+        if (!$ticket) {
+            return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+        $currentUser = get_current_user_id();
+        $assume = $req->get_param('assume') ? 1 : 0;
         $i = ans_tickets_table('interacoes');
         $msg = wp_kses_post($req->get_param('mensagem'));
         if (!$msg) {
             return new WP_REST_Response(['error' => 'Mensagem obrigatória'], 400);
         }
         $interno = $req->get_param('interno') ? 1 : 0;
+        $isOwner = !empty($ticket['responsavel_id']) && (int)$ticket['responsavel_id'] === $currentUser;
+        if (empty($ticket['responsavel_id'])) {
+            $wpdb->update($t, ['responsavel_id' => $currentUser, 'updated_at' => current_time('mysql')], ['id' => (int)$req['id']]);
+        } elseif (!$isOwner) {
+            if (!$interno && !$assume) {
+                return new WP_REST_Response(['error' => 'Ticket possui outro responsável. Assuma para responder ou envie como nota interna.', 'owner' => (int)$ticket['responsavel_id']], 409);
+            }
+            if ($assume) {
+                $wpdb->update($t, ['responsavel_id' => $currentUser, 'updated_at' => current_time('mysql')], ['id' => (int)$req['id']]);
+            }
+        }
         $wpdb->insert($i, [
             'ticket_id' => (int)$req['id'],
             'autor_tipo' => 'usuario',
@@ -716,7 +734,6 @@ class ANS_Tickets_Routes
             'mensagem' => $msg,
             'interno' => $interno,
         ]);
-        $t = ans_tickets_table('tickets');
         $wpdb->update($t, ['updated_at' => current_time('mysql')], ['id' => (int)$req['id']]);
         return ['status' => 'ok', 'interacao_id' => $wpdb->insert_id];
     }
@@ -745,10 +762,12 @@ class ANS_Tickets_Routes
 
         $wpdb->update($t, [
             'departamento_id' => $new_dep,
+            'responsavel_id' => null,
             'updated_at' => current_time('mysql')
         ], ['id' => $id]);
 
-        $msg = sprintf('Ticket transferido de %s para %s', $old_dep_name ?: 'N/A', $new_dep_name);
+        $actor = wp_get_current_user()->display_name ?: 'Atendente';
+        $msg = sprintf('Ticket transferido de %s para %s. Responsável removido. Ação por %s.', $old_dep_name ?: 'N/A', $new_dep_name, $actor);
         $wpdb->insert($i, [
             'ticket_id' => $id,
             'autor_tipo' => 'usuario',
@@ -1414,10 +1433,11 @@ class ANS_Tickets_Routes
             $filtersParams[] = sanitize_text_field($req->get_param('protocolo'));
         }
 
-        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours
+        $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours, u.display_name AS responsavel_nome
                 FROM {$t} t
                 JOIN {$c} c ON t.cliente_id=c.id
                 LEFT JOIN {$d} d ON t.departamento_id=d.id
+                LEFT JOIN {$wpdb->users} u ON t.responsavel_id=u.ID
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY t.updated_at DESC
                 LIMIT %d OFFSET %d";

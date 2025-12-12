@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.7.0');
+define('ANS_TICKETS_VERSION', '0.7.7');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));

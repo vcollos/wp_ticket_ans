@@ -60,6 +60,7 @@
 
   function renderCard(item){
     const pct = slaPct(item.created_at, item.sla_hours||0);
+    const resp = item.responsavel_nome || 'Sem responsável';
     const card = document.createElement('article');
     card.className='kanban-card';
     card.draggable = true;
@@ -73,6 +74,7 @@
       </div>
       <div class="client">${item.nome_completo||''}</div>
       <div class="meta">${item.departamento_nome||'-'} • ${humanTime(item.created_at)}</div>
+      <div class="meta resp">${resp}</div>
       <div class="status-pill">${label}</div>
       <div class="sla"><span style="width:${pct}%"></span></div>
     `;
@@ -261,7 +263,8 @@
         lastDate = day;
         header = `<div class="ans-date-sep">${day}</div>`;
       }
-      const who = i.autor_tipo==='cliente' ? 'Beneficiário' : 'Atendente';
+      const authorName = i.usuario_nome || (i.autor_tipo==='cliente' ? 'Beneficiário' : 'Atendente');
+      const who = i.autor_tipo==='cliente' ? 'Beneficiário' : `Atendente · ${authorName}`;
       const cls = i.interno ? 'internal' : (i.autor_tipo==='cliente'?'client':'agent');
       const attach = map[i.id]||[];
       const attachHtml = attach.length ? `<div class="attach-row">${attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'}</a>`).join('<br>')}</div>` : '';
@@ -336,17 +339,27 @@
     }
   }
 
-  async function sendReply(id, interno=false){
+  async function sendReply(id, interno=false, opts={}){
     const msgEl = detailHost?.querySelector('#detail-reply');
     if(!msgEl) return;
     const msg = msgEl.value.trim();
     if(!msg){ alert('Mensagem obrigatória'); return; }
     try{
-      await fetchJSON(`${api}/admin/tickets/${id}/reply`,{method:'POST',headers: headers(),body: JSON.stringify({mensagem:msg, interno})});
+      await fetchJSON(`${api}/admin/tickets/${id}/reply`,{method:'POST',headers: headers(),body: JSON.stringify({mensagem:msg, interno, assume: opts.assume ? 1 : 0})});
       msgEl.value='';
       await openDetail(id);
       reloadBoard();
-    }catch(e){ alert(e.message||'Erro ao responder'); }
+    }catch(e){
+      const text = (e.message||'').toLowerCase();
+      if(!interno && text.includes('respons')){
+        const assume = confirm('Este chamado tem outro responsável. Deseja assumir e responder? Cancelar enviará como nota interna.');
+        if(assume){
+          return sendReply(id,false,{assume:true});
+        }
+        return sendReply(id,true);
+      }
+      alert(e.message||'Erro ao responder');
+    }
   }
 
   async function saveCombined(id){

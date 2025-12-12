@@ -338,7 +338,8 @@
       const items = byDay[day].map(i=>{
         const isInternal = String(i.interno) === '1' || i.interno === true;
         const isClient = (i.autor_tipo || '') === 'cliente';
-        const role = isInternal ? 'Nota interna' : (isClient ? 'Beneficiário' : 'Atendente');
+        const authorName = i.usuario_nome || (isClient ? 'Beneficiário' : 'Atendente');
+        const role = isInternal ? `Nota interna · ${authorName}` : (isClient ? `Beneficiário` : `Atendente · ${authorName}`);
         const roleClass = isInternal ? 'pill-note' : (isClient ? 'pill-client' : 'pill-agent');
         const attach = map[i.id]||[];
         const attachHtml = attach.length ? `<div class="ans-history-attach">${attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'}</a>`).join('<br>')}</div>` : '';
@@ -497,15 +498,24 @@
     }
   }
 
-  async function sendReply(id, interno=false){
-    const msg = document.getElementById('reply-msg').value.trim();
+  async function sendReply(id, interno=false, opts={}){
+    const msgEl = document.getElementById('reply-msg');
+    const msg = msgEl ? msgEl.value.trim() : '';
     if(!msg){alert('Mensagem obrigatória');return;}
     try{
-      await fetchJSON(`${api}/admin/tickets/${id}/reply`,{method:'POST',headers,body:JSON.stringify({mensagem:msg, interno})});
+      await fetchJSON(`${api}/admin/tickets/${id}/reply`,{method:'POST',headers,body:JSON.stringify({mensagem:msg, interno, assume: opts.assume ? 1 : 0})});
       localStorage.removeItem(`ans_draft_${id}`);
       await loadTicket(id);
       announce(interno ? 'Nota interna adicionada.' : 'Resposta enviada ao cliente.');
     }catch(e){
+      const text = (e.message||'').toLowerCase();
+      if(!interno && text.includes('respons')) {
+        const assume = confirm('Este chamado tem outro responsável. Deseja assumir e responder? Cancelar enviará como nota interna.');
+        if(assume){
+          return sendReply(id,false,{assume:true});
+        }
+        return sendReply(id,true);
+      }
       alert(e.message||'Erro ao enviar resposta');
     }
   }

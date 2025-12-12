@@ -62,6 +62,7 @@ CREATE TABLE {$prefix}tickets (
     assunto VARCHAR(80) NOT NULL,
     descricao TEXT NOT NULL,
     departamento_id BIGINT UNSIGNED,
+    responsavel_id BIGINT UNSIGNED,
     status VARCHAR(40) NOT NULL DEFAULT 'novo',
     prioridade VARCHAR(10) NOT NULL DEFAULT 'media',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -260,10 +261,23 @@ CREATE TABLE {$prefix}respostas_rapidas_links (
     public static function maybe_update(): void
     {
         $installed_version = get_option('ans_tickets_version', '0.0.0');
-        if (version_compare($installed_version, ANS_TICKETS_VERSION, '<')) {
+        $needs_update = version_compare($installed_version, ANS_TICKETS_VERSION, '<');
+        // Garantir colunas críticas mesmo se a versão não avançar
+        if (!$needs_update && !self::has_required_columns()) {
+            $needs_update = true;
+        }
+        if ($needs_update) {
             self::update_database();
             update_option('ans_tickets_version', ANS_TICKETS_VERSION);
         }
+    }
+
+    private static function has_required_columns(): bool
+    {
+        global $wpdb;
+        $tickets = ans_tickets_table('tickets');
+        $cols = $wpdb->get_col("SHOW COLUMNS FROM {$tickets}");
+        return in_array('responsavel_id', $cols, true);
     }
 
     private static function update_database(): void
