@@ -1,8 +1,6 @@
 (function(){
   const api = (window.ANS_TICKETS_KANBAN && ANS_TICKETS_KANBAN.api) || '';
   const nonce = ANS_TICKETS_KANBAN?.nonce || '';
-  const baseFallback = ['novo','em_andamento','resolvido','nao_resolvido'].map(s=>({slug:s,name:labelFromSlug(s)}));
-  const defaultStatuses = (ANS_TICKETS_KANBAN?.status || []).map(s=>({slug:s,name:labelFromSlug(s)}));
   let statuses = [];
   let agentsCache = [];
   let depCache = [];
@@ -19,6 +17,10 @@
 
   function labelFromSlug(s){
     return (s||'').replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase());
+  }
+
+  function statusKey(s){
+    return String(s||'').toLowerCase().replace(/-/g,'_');
   }
 
   function headers(json=true){
@@ -58,12 +60,16 @@
 
   function priorityClass(p){ return p==='alta'?'pri-alta':(p==='baixa'?'pri-baixa':'pri-media'); }
 
+  function canDrag(){
+    return !!(filters.dep && filters.dep.value);
+  }
+
   function renderCard(item){
     const pct = slaPct(item.created_at, item.sla_hours||0);
     const resp = item.responsavel_nome || 'Sem responsável';
     const card = document.createElement('article');
     card.className='kanban-card';
-    card.draggable = true;
+    card.draggable = canDrag();
     card.dataset.id = item.id;
     card.dataset.status = item.status;
     const label = item.status_label || labelFromSlug(item.status);
@@ -78,12 +84,14 @@
       <div class="status-pill">${label}</div>
       <div class="sla"><span style="width:${pct}%"></span></div>
     `;
-    card.addEventListener('dragstart', (ev)=>{
-      ev.dataTransfer.setData('text/plain', String(item.id));
-      ev.dataTransfer.effectAllowed='move';
-      setTimeout(()=>card.classList.add('dragging'),0);
-    });
-    card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    if(card.draggable){
+      card.addEventListener('dragstart', (ev)=>{
+        ev.dataTransfer.setData('text/plain', String(item.id));
+        ev.dataTransfer.effectAllowed='move';
+        setTimeout(()=>card.classList.add('dragging'),0);
+      });
+      card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
+    }
     card.addEventListener('click', ()=>openDetail(item.id));
     return card;
   }
@@ -106,11 +114,13 @@
       `;
       const list = col.querySelector('.kanban-list');
       list.addEventListener('dragover',(ev)=>{
+        if(!canDrag()) return;
         ev.preventDefault();
         list.classList.add('drag-over');
       });
       list.addEventListener('dragleave',()=>list.classList.remove('drag-over'));
       list.addEventListener('drop',(ev)=>{
+        if(!canDrag()) return;
         ev.preventDefault();
         list.classList.remove('drag-over');
         const id = parseInt(ev.dataTransfer.getData('text/plain'),10);
@@ -166,6 +176,15 @@
     }catch(e){}
   }
 
+  function resetFilters(){
+    if(filters.status) filters.status.value = '';
+    if(filters.dep) filters.dep.value = '';
+    if(filters.resp) filters.resp.value = '';
+    if(filters.pri) filters.pri.value = '';
+    if(filters.proto) filters.proto.value = '';
+    if(filters.doc) filters.doc.value = '';
+  }
+
   async function loadColumn(status, append=false){
     const list = board.querySelector(`.kanban-list[data-status="${status}"]`);
     if(!list) return;
@@ -179,8 +198,12 @@
     items.forEach(item=>list.appendChild(renderCard(item)));
     const countEl = document.getElementById(`count-${status}`);
     if(countEl && data.counts){
-      const found = data.counts.find(c=>c.status===status);
-      countEl.textContent = found ? found.total : items.length;
+      const key = statusKey(status);
+      const total = (data.counts||[]).reduce((sum, c)=>{
+        if(statusKey(c.status) === key) return sum + parseInt(c.total||0,10);
+        return sum;
+      }, 0);
+      countEl.textContent = total ? total : items.length;
     }
     state[status] = {offset, items: items.length};
   }
@@ -216,17 +239,40 @@
     try{
       const qs = depId ? `?departamento_id=${depId}` : '';
       const res = await fetchJSON(`${api}/admin/status-custom${qs}`,{headers: headers(false)});
-      const arr = (res||[]).map(r=>({slug:r.slug,name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
-      if(arr.length){
-        statuses = arr;
-      }else{
-        // tenta globais sem depto
-        const global = await fetchJSON(`${api}/admin/status-custom`,{headers: headers(false)}).catch(()=>[]);
-        const arrGlobal = (global||[]).map(r=>({slug:r.slug,name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
-        statuses = arrGlobal.length ? arrGlobal : (defaultStatuses.length ? defaultStatuses : baseFallback);
-      }
+
+      // Kanban só deve exibir status cadastrados no admin (por departamento).
+      const byKey = new Map();
+      (res||[]).forEach(r=>{
+        const slug = r?.slug;
+        if(!slug) return;
+        const key = statusKey(slug);
+        const existing = byKey.get(key);
+        if(!existing){
+          byKey.set(key, r);
+          return;
+        }
+        // desempate: menor ordem, depois nome
+        const ordA = parseInt(existing.ordem||0,10);
+        const ordB = parseInt(r.ordem||0,10);
+        if(ordB < ordA){
+          byKey.set(key, r);
+          return;
+        }
+        if(ordB === ordA && String(r.nome||'') < String(existing.nome||'')){
+          byKey.set(key, r);
+        }
+      });
+
+      statuses = Array.from(byKey.values())
+        .map(r=>({slug:r.slug, name:r.nome||labelFromSlug(r.slug), cor:r.cor, ordem:r.ordem}))
+        .sort((a,b)=> (parseInt(a.ordem||0,10) - parseInt(b.ordem||0,10)) || String(a.name).localeCompare(String(b.name)));
     }catch(e){
-      statuses = defaultStatuses.length ? defaultStatuses : baseFallback;
+      statuses = [];
+    }
+    if(!statuses.length && board){
+      board.innerHTML = '<div class="ans-ticket-card"><p>Nenhum grupo de status configurado para exibir no Kanban. Cadastre um grupo Global em Status custom (wp-admin) ou finalize o grupo do departamento.</p></div>';
+      if(filters.status) filters.status.innerHTML = '<option value="">Status</option>';
+      return;
     }
     updateStatusFilter();
   }
@@ -278,7 +324,14 @@
     host.innerHTML = '<div class="detail-card">Carregando chamado...</div>';
     try{
       const t = await fetchJSON(`${api}/admin/tickets/${id}`,{headers: headers(false)});
-      const statusOptions = statuses.map(s=>`<option value="${s.slug}" ${s.slug===t.status?'selected':''}>${s.name}</option>`).join('');
+      let deptStatuses = statuses;
+      try{
+        if(t.departamento_id){
+          const list = await fetchJSON(`${api}/admin/status-custom?departamento_id=${t.departamento_id}`,{headers: headers(false)});
+          deptStatuses = (list||[]).map(r=>({slug:r.slug, name:r.nome||labelFromSlug(r.slug), cor:r.cor}));
+        }
+      }catch(e){}
+      const statusOptions = (deptStatuses||[]).map(s=>`<option value="${s.slug}" ${statusKey(s.slug)===statusKey(t.status)?'selected':''}>${s.name}</option>`).join('');
       const depOptions = depCache.map(d=>`<option value="${d.id}" ${d.id===t.departamento_id?'selected':''}>${d.nome}</option>`).join('');
       const agentOptions = ['<option value="">Sem responsável</option>'].concat(agentsCache.map(a=>`<option value="${a.id}" ${a.id===t.responsavel_id?'selected':''}>${a.name}</option>`)).join('');
       const priOptions = ['baixa','media','alta'].map(p=>`<option value="${p}" ${p===t.prioridade?'selected':''}>${p}</option>`).join('');
@@ -405,8 +458,10 @@
   async function init(){
     if(!board) return;
     await populateSelects();
-    await restoreFilters();
+    // Sempre iniciar com filtros zerados (não aplica o último estado salvo).
+    resetFilters();
     await loadStatuses();
+    if(!statuses.length) return;
     renderColumns();
     updateStatusFilter();
     await reloadBoard();
@@ -420,6 +475,7 @@
     if(filters.dep){
       filters.dep.addEventListener('change', async ()=>{
         await loadStatuses();
+        if(!statuses.length) return;
         renderColumns();
         updateStatusFilter();
         reloadBoard();

@@ -30,28 +30,7 @@
   const tabBtns = document.querySelectorAll('.ans-tab-btn');
   const tabTable = document.getElementById('tab-table');
   const tabKanban = document.getElementById('tab-kanban');
-  const BASE_STATUS = [
-    'aberto',
-    'em_triagem',
-    'aguardando_informacoes_solicitante',
-    'em_analise',
-    'em_execucao',
-    'aguardando_terceiros',
-    'aguardando_aprovacao',
-    'solucao_proposta',
-    'resolvido',
-    'fechado',
-    'aguardando_acao',
-    'novo',
-    'atendimento',
-    'financeiro',
-    'comercial',
-    'assistencial',
-    'ouvidoria',
-    'concluido',
-    'arquivado',
-    'pendente_cliente'
-  ];
+  const BASE_STATUS = [];
   const STATUS_LABELS = {
     aberto: 'Aberto',
     em_triagem: 'Em Triagem',
@@ -75,7 +54,7 @@
     assistencial: 'Assistencial',
     ouvidoria: 'Ouvidoria'
   };
-  let statusOptions = BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)}));
+  let statusOptions = [];
   let autoRefresh = null;
 
   const statusLabel = (s)=>STATUS_LABELS[s]||labelFromSlug(s);
@@ -154,27 +133,29 @@
     try{
       const qs = departamentoId ? `?departamento_id=${departamentoId}` : '';
       const custom = await fetchJSON(`${api}/admin/status-custom${qs}`,{headers});
-      const mapped = (custom||[]).map(s=>({slug:s.slug,name:s.nome||statusLabel(s.slug)}));
-      const baseSet = new Set(BASE_STATUS);
-      const merged = [
-        ...BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)})),
-        ...mapped.filter(m=>!baseSet.has(m.slug))
-      ];
-      statusOptions = merged;
+      statusOptions = (custom||[]).map(s=>({slug:s.slug,name:s.nome||statusLabel(s.slug)}));
       renderStatusSelects();
     }catch(e){
-      statusOptions = BASE_STATUS.map(slug=>({slug,name:statusLabel(slug)}));
+      statusOptions = [];
       renderStatusSelects();
     }
   }
 
   function renderStatusSelects(){
     if(statusSelect){
-      statusSelect.innerHTML = '<option value=\"\">Todos</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+      if(statusOptions.length){
+        statusSelect.innerHTML = '<option value=\"\">Todos</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+      }else{
+        statusSelect.innerHTML = '<option value=\"\">Todos</option>';
+      }
     }
     const updateStatus = document.getElementById('update-status');
     if(updateStatus){
-      updateStatus.innerHTML = '<option value=\"\">Status</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+      if(statusOptions.length){
+        updateStatus.innerHTML = '<option value=\"\">Status</option>' + statusOptions.map(s=>`<option value=\"${s.slug}\">${s.name}</option>`).join('');
+      }else{
+        updateStatus.innerHTML = '<option value=\"\">Status</option>';
+      }
     }
   }
 
@@ -732,6 +713,13 @@
       renderSavedChips();
       loadTickets();
       startAutoRefresh();
+    });
+  }
+
+  if(depFilter){
+    depFilter.addEventListener('change', async ()=>{
+      await ensureStatuses(depFilter.value || null);
+      if(statusSelect) statusSelect.value = '';
     });
   }
 

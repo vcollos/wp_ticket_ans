@@ -79,6 +79,161 @@ function ans_tickets_custom_statuses(): array
     }, $rows);
 }
 
+function ans_tickets_status_key(string $slug): string
+{
+    $slug = strtolower(trim($slug));
+    $slug = str_replace('-', '_', $slug);
+    return $slug;
+}
+
+function ans_tickets_has_global_status_group(): bool
+{
+    global $wpdb;
+    $table = ans_tickets_table('status_custom');
+    if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
+        return false;
+    }
+    $count = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE ativo=1 AND departamento_id IS NULL");
+    return $count > 0;
+}
+
+function ans_tickets_status_group_ready(int $departamento_id): bool
+{
+    global $wpdb;
+    $table = ans_tickets_table('status_custom');
+    if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
+        return false;
+    }
+    $initial = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE ativo=1 AND departamento_id=%d AND inicial=1", $departamento_id));
+    $finalOk = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE ativo=1 AND departamento_id=%d AND final_resolvido=1", $departamento_id));
+    $finalNok = (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$table} WHERE ativo=1 AND departamento_id=%d AND final_nao_resolvido=1", $departamento_id));
+    return $initial === 1 && $finalOk === 1 && $finalNok === 1;
+}
+
+function ans_tickets_effective_status_group_departamento_id(?int $departamento_id): ?int
+{
+    if (!$departamento_id) {
+        return null; // global
+    }
+    if (!ans_tickets_has_global_status_group()) {
+        return $departamento_id;
+    }
+    return ans_tickets_status_group_ready($departamento_id) ? $departamento_id : null;
+}
+
+function ans_tickets_migrate_tickets_from_global_to_departamento(int $departamento_id): int
+{
+    global $wpdb;
+    $statusTable = ans_tickets_table('status_custom');
+    $ticketsTable = ans_tickets_table('tickets');
+
+    if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $statusTable))) {
+        return 0;
+    }
+
+    // Migra apenas quando o grupo do departamento estiver completo.
+    if (!ans_tickets_status_group_ready($departamento_id)) {
+        return 0;
+    }
+
+    $global = $wpdb->get_results(
+        "SELECT slug, inicial, final_resolvido, final_nao_resolvido, ordem
+         FROM {$statusTable}
+         WHERE ativo=1 AND departamento_id IS NULL
+         ORDER BY ordem ASC, nome ASC",
+        ARRAY_A
+    );
+    if (!$global) {
+        return 0;
+    }
+
+    $dept = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT slug, inicial, final_resolvido, final_nao_resolvido, ordem
+             FROM {$statusTable}
+             WHERE ativo=1 AND departamento_id=%d
+             ORDER BY ordem ASC, nome ASC",
+            $departamento_id
+        ),
+        ARRAY_A
+    );
+    if (!$dept) {
+        return 0;
+    }
+
+    $deptInitial = null;
+    $deptFinalOk = null;
+    $deptFinalNok = null;
+    $deptMiddle = null;
+    foreach ($dept as $row) {
+        if ((int)$row['inicial'] === 1) {
+            $deptInitial = $row['slug'];
+        } elseif ((int)$row['final_resolvido'] === 1) {
+            $deptFinalOk = $row['slug'];
+        } elseif ((int)$row['final_nao_resolvido'] === 1) {
+            $deptFinalNok = $row['slug'];
+        } elseif (!$deptMiddle) {
+            $deptMiddle = $row['slug'];
+        }
+    }
+    if (!$deptInitial) {
+        $deptInitial = $dept[0]['slug'];
+    }
+    if (!$deptMiddle) {
+        $deptMiddle = $deptInitial;
+    }
+
+    // Mapa global (por categoria) -> status do departamento.
+    $map = [];
+    foreach ($global as $g) {
+        $k = ans_tickets_status_key((string)$g['slug']);
+        if ((int)$g['inicial'] === 1) {
+            $map[$k] = $deptInitial;
+        } elseif ((int)$g['final_resolvido'] === 1) {
+            $map[$k] = $deptFinalOk ?: $deptInitial;
+        } elseif ((int)$g['final_nao_resolvido'] === 1) {
+            $map[$k] = $deptFinalNok ?: $deptInitial;
+        } else {
+            $map[$k] = $deptMiddle;
+        }
+    }
+
+    // Variantes "_" <-> "-" para pegar tickets antigos.
+    $candidates = array_values(array_unique(array_merge(
+        array_map(fn($g) => (string)$g['slug'], $global),
+        array_map(fn($g) => str_replace('-', '_', (string)$g['slug']), $global)
+    )));
+
+    $placeholders = implode(',', array_fill(0, count($candidates), '%s'));
+    $query = $wpdb->prepare(
+        "SELECT id, status FROM {$ticketsTable} WHERE departamento_id=%d AND status IN ({$placeholders})",
+        $departamento_id,
+        ...$candidates
+    );
+    $rows = $wpdb->get_results($query, ARRAY_A);
+    if (!$rows) {
+        return 0;
+    }
+
+    $migrated = 0;
+    foreach ($rows as $t) {
+        $key = ans_tickets_status_key((string)$t['status']);
+        if (!isset($map[$key])) {
+            continue;
+        }
+        $new = $map[$key];
+        if ($new === $t['status']) {
+            continue;
+        }
+        $ok = $wpdb->update($ticketsTable, ['status' => $new, 'updated_at' => current_time('mysql')], ['id' => (int)$t['id']]);
+        if ($ok !== false) {
+            $migrated++;
+        }
+    }
+
+    return $migrated;
+}
+
 function ans_tickets_status_label_for(string $slug, ?int $departamento_id = null): string
 {
     global $wpdb;
@@ -86,11 +241,12 @@ function ans_tickets_status_label_for(string $slug, ?int $departamento_id = null
     $table = ans_tickets_table('status_custom');
     if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
         $name = null;
-        if ($departamento_id) {
+        $effective = ans_tickets_effective_status_group_departamento_id($departamento_id);
+        if ($effective) {
             $name = $wpdb->get_var($wpdb->prepare(
                 "SELECT nome FROM {$table} WHERE slug=%s AND departamento_id=%d AND ativo=1 LIMIT 1",
                 $slug,
-                $departamento_id
+                $effective
             ));
         }
         if (!$name) {
@@ -168,8 +324,9 @@ function ans_tickets_initial_status(?int $departamento_id = null): string
     $table = ans_tickets_table('status_custom');
     if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table))) {
         $slug = null;
-        if ($departamento_id) {
-            $slug = $wpdb->get_var($wpdb->prepare("SELECT slug FROM {$table} WHERE inicial=1 AND ativo=1 AND departamento_id=%d ORDER BY ordem ASC LIMIT 1", $departamento_id));
+        $effective = ans_tickets_effective_status_group_departamento_id($departamento_id);
+        if ($effective) {
+            $slug = $wpdb->get_var($wpdb->prepare("SELECT slug FROM {$table} WHERE inicial=1 AND ativo=1 AND departamento_id=%d ORDER BY ordem ASC LIMIT 1", $effective));
         }
         if (!$slug) {
             $slug = $wpdb->get_var("SELECT slug FROM {$table} WHERE inicial=1 AND ativo=1 AND departamento_id IS NULL ORDER BY ordem ASC LIMIT 1");

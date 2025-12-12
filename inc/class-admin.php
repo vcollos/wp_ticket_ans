@@ -581,7 +581,11 @@ class ANS_Tickets_Admin
         $depsTable = ans_tickets_table('departamentos');
 
         $message = '';
-        self::seed_default_statuses();
+        // Seed somente em instalação nova (evita recriar pipelines sem ação do admin).
+        $countExisting = (int)$wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        if ($countExisting === 0) {
+            self::seed_default_statuses();
+        }
         if (!empty($_POST['ans_status_nonce']) && wp_verify_nonce($_POST['ans_status_nonce'], 'ans_status_save')) {
             $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
             $dep = $_POST['departamento_id'] !== '' ? (int)$_POST['departamento_id'] : null;
@@ -616,6 +620,9 @@ class ANS_Tickets_Admin
             }
             if (!empty($_POST['final_nao_resolvido'])) {
                 $wpdb->query($wpdb->prepare("UPDATE {$table} SET final_nao_resolvido=0 WHERE departamento_id {$depWhere} AND id != %d", $id));
+            }
+            if ($dep) {
+                ans_tickets_migrate_tickets_from_global_to_departamento($dep);
             }
         }
         if (!empty($_GET['action']) && $_GET['action'] === 'delete' && !empty($_GET['id']) && check_admin_referer('ans_status_delete_' . (int)$_GET['id'])) {

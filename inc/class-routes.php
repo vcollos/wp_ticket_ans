@@ -585,7 +585,8 @@ class ANS_Tickets_Routes
         if ($inserted === false) {
             return new WP_REST_Response(['error' => 'Erro ao inserir mensagem: ' . $wpdb->last_error], 500);
         }
-        $wpdb->update($table_tickets, ['updated_at' => current_time('mysql'), 'status' => 'em_analise'], ['id' => $ticket_id]);
+        // Não muda status hardcoded: status deve ser gerenciado via status_custom (por departamento).
+        $wpdb->update($table_tickets, ['updated_at' => current_time('mysql')], ['id' => $ticket_id]);
         return new WP_REST_Response(['status' => 'ok', 'message' => 'Mensagem adicionada com sucesso'], 200);
     }
 
@@ -596,15 +597,53 @@ class ANS_Tickets_Routes
         $c = ans_tickets_table('clientes');
         $d = ans_tickets_table('departamentos');
         $u = $wpdb->users;
+        $dept_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        $allowed_departamentos = [];
+        if (!$is_manager) {
+            $allowed_departamentos = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed_departamentos = array_values(array_unique(array_filter(array_map('intval', (array)$allowed_departamentos))));
+            if (!$allowed_departamentos) {
+                return [];
+            }
+        }
         $where = [];
         $params = [];
+
+        if (!$is_manager) {
+            $in = implode(',', array_fill(0, count($allowed_departamentos), '%d'));
+            $where[] = "t.departamento_id IN ({$in})";
+            array_push($params, ...$allowed_departamentos);
+        }
+
         if ($req->get_param('status')) {
-            $where[] = 't.status=%s';
-            $params[] = sanitize_text_field($req->get_param('status'));
+            $status_raw = sanitize_text_field($req->get_param('status'));
+            if (strpos($status_raw, '-') !== false) {
+                $status_alias = str_replace('-', '_', $status_raw);
+            } elseif (strpos($status_raw, '_') !== false) {
+                $status_alias = str_replace('_', '-', $status_raw);
+            } else {
+                $status_alias = $status_raw;
+            }
+            if ($status_alias !== $status_raw) {
+                $where[] = 't.status IN (%s,%s)';
+                $params[] = $status_raw;
+                $params[] = $status_alias;
+            } else {
+                $where[] = 't.status=%s';
+                $params[] = $status_raw;
+            }
         }
         if ($req->get_param('departamento_id')) {
+            $dep_id = (int)$req->get_param('departamento_id');
+            if (!$is_manager && !in_array($dep_id, $allowed_departamentos, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao departamento'], 403);
+            }
             $where[] = 't.departamento_id=%d';
-            $params[] = (int)$req->get_param('departamento_id');
+            $params[] = $dep_id;
         }
         if ($req->get_param('protocolo')) {
             $where[] = 't.protocolo=%s';
@@ -630,7 +669,7 @@ class ANS_Tickets_Routes
             $sql .= ' WHERE ' . implode(' AND ', $where);
         }
         $sql .= ' ORDER BY t.created_at DESC LIMIT 100';
-        $prepared = $wpdb->prepare($sql, $params);
+        $prepared = $params ? $wpdb->prepare($sql, $params) : $sql;
         $rows = $wpdb->get_results($prepared);
         foreach ($rows as &$row) {
             $row->status_label = ans_tickets_status_label_for($row->status, (int)$row->departamento_id);
@@ -646,6 +685,7 @@ class ANS_Tickets_Routes
         $d = ans_tickets_table('departamentos');
         $i = ans_tickets_table('interacoes');
         $a = ans_tickets_table('anexos');
+        $dept_users = ans_tickets_table('departamento_users');
         $id = (int)$req['id'];
 
         $ticket = $wpdb->get_row($wpdb->prepare(
@@ -654,6 +694,17 @@ class ANS_Tickets_Routes
         ), ARRAY_A);
         if (!$ticket) {
             return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        if (!$is_manager) {
+            $allowed = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+            if (!$allowed || !in_array((int)$ticket['departamento_id'], $allowed, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+            }
         }
         $ticket['status_label'] = ans_tickets_status_label_for($ticket['status'], (int)$ticket['departamento_id']);
         $ticket['interacoes'] = $wpdb->get_results($wpdb->prepare(
@@ -671,17 +722,56 @@ class ANS_Tickets_Routes
     {
         global $wpdb;
         $t = ans_tickets_table('tickets');
-        $allowed_status = ans_tickets_statuses();
+        $dept_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
         $data = [];
+
+        $ticket = $wpdb->get_row($wpdb->prepare("SELECT departamento_id FROM {$t} WHERE id=%d", (int)$req['id']), ARRAY_A);
+        if (!$ticket) {
+            return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+        $current_dep_id = (int)$ticket['departamento_id'];
+        $target_dep_id = $req->get_param('departamento_id') ? (int)$req->get_param('departamento_id') : $current_dep_id;
+        $allowed_deps = [];
+        if (!$is_manager) {
+            $allowed_deps = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed_deps = array_values(array_unique(array_filter(array_map('intval', (array)$allowed_deps))));
+            if (!$allowed_deps || !in_array($current_dep_id, $allowed_deps, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+            }
+        }
+
         if ($req->get_param('status')) {
             $status = sanitize_text_field($req->get_param('status'));
-            if (!in_array($status, $allowed_status, true)) {
-                return new WP_REST_Response(['error' => 'Status inválido'], 400);
+            $s = ans_tickets_table('status_custom');
+            $canon = str_replace('_', '-', $status);
+            $effective_group = ans_tickets_effective_status_group_departamento_id($target_dep_id);
+            if ($effective_group) {
+                $exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$s} WHERE ativo=1 AND departamento_id=%d AND slug=%s LIMIT 1",
+                    $effective_group,
+                    $canon
+                ));
+            } else {
+                $exists = $wpdb->get_var($wpdb->prepare(
+                    "SELECT id FROM {$s} WHERE ativo=1 AND departamento_id IS NULL AND slug=%s LIMIT 1",
+                    $canon
+                ));
             }
-            $data['status'] = $status;
+            if (!$exists) {
+                return new WP_REST_Response(['error' => 'Status inválido para este departamento'], 400);
+            }
+            $data['status'] = $canon;
         }
         if ($req->get_param('departamento_id')) {
-            $data['departamento_id'] = (int)$req->get_param('departamento_id');
+            $new_dep_id = (int)$req->get_param('departamento_id');
+            if (!$is_manager && $allowed_deps && !in_array($new_dep_id, $allowed_deps, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao departamento'], 403);
+            }
+            $data['departamento_id'] = $new_dep_id;
         }
         if ($req->get_param('prioridade')) {
             $data['prioridade'] = sanitize_text_field($req->get_param('prioridade'));
@@ -704,9 +794,21 @@ class ANS_Tickets_Routes
     {
         global $wpdb;
         $t = ans_tickets_table('tickets');
-        $ticket = $wpdb->get_row($wpdb->prepare("SELECT responsavel_id FROM {$t} WHERE id=%d", (int)$req['id']), ARRAY_A);
+        $dept_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        $ticket = $wpdb->get_row($wpdb->prepare("SELECT responsavel_id, departamento_id FROM {$t} WHERE id=%d", (int)$req['id']), ARRAY_A);
         if (!$ticket) {
             return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+        if (!$is_manager) {
+            $allowed = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+            if (!$allowed || !in_array((int)$ticket['departamento_id'], $allowed, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+            }
         }
         $currentUser = get_current_user_id();
         $assume = $req->get_param('assume') ? 1 : 0;
@@ -749,10 +851,23 @@ class ANS_Tickets_Routes
         $t = ans_tickets_table('tickets');
         $d = ans_tickets_table('departamentos');
         $i = ans_tickets_table('interacoes');
+        $dept_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
 
         $ticket = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$t} WHERE id=%d", $id), ARRAY_A);
         if (!$ticket) {
             return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+        }
+
+        if (!$is_manager) {
+            $allowed = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+            if (!$allowed || !in_array((int)$ticket['departamento_id'], $allowed, true) || !in_array($new_dep, $allowed, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao departamento'], 403);
+            }
         }
         $old_dep_name = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$d} WHERE id=%d", $ticket['departamento_id']));
         $new_dep_name = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$d} WHERE id=%d", $new_dep));
@@ -762,12 +877,13 @@ class ANS_Tickets_Routes
 
         $wpdb->update($t, [
             'departamento_id' => $new_dep,
+            'status' => ans_tickets_initial_status($new_dep),
             'responsavel_id' => null,
             'updated_at' => current_time('mysql')
         ], ['id' => $id]);
 
         $actor = wp_get_current_user()->display_name ?: 'Atendente';
-        $msg = sprintf('Ticket transferido de %s para %s. Responsável removido. Ação por %s.', $old_dep_name ?: 'N/A', $new_dep_name, $actor);
+        $msg = sprintf('Ticket transferido de %s para %s. Status redefinido para o inicial do depto e responsável removido. Ação por %s.', $old_dep_name ?: 'N/A', $new_dep_name, $actor);
         $wpdb->insert($i, [
             'ticket_id' => $id,
             'autor_tipo' => 'usuario',
@@ -785,12 +901,20 @@ class ANS_Tickets_Routes
         $t = ans_tickets_table('tickets');
         $d = ans_tickets_table('departamentos');
         $i = ans_tickets_table('interacoes');
+        $s = ans_tickets_table('status_custom');
         $stats = [];
 
         $stats['status_counts'] = $wpdb->get_results("SELECT status, COUNT(*) AS total FROM {$t} GROUP BY status", ARRAY_A);
         $stats['department_counts'] = $wpdb->get_results("SELECT d.nome, COUNT(*) AS total FROM {$t} t LEFT JOIN {$d} d ON t.departamento_id=d.id GROUP BY d.nome", ARRAY_A);
         $stats['subject_counts'] = $wpdb->get_results("SELECT assunto, COUNT(*) AS total FROM {$t} GROUP BY assunto", ARRAY_A);
-        $stats['avg_resolution_hours'] = (float)$wpdb->get_var("SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, updated_at)) FROM {$t} WHERE status IN ('fechado','resolvido')");
+        $stats['avg_resolution_hours'] = (float)$wpdb->get_var(
+            "SELECT AVG(TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at))
+             FROM {$t} t
+             LEFT JOIN {$s} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug = REPLACE(t.status,'_','-')
+             LEFT JOIN {$s} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug = REPLACE(t.status,'_','-')
+             WHERE COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)=1
+                OR COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)=1"
+        );
         $stats['avg_first_response_hours'] = (float)$wpdb->get_var(
             "SELECT AVG(TIMESTAMPDIFF(HOUR, t.created_at, iu.first_response))
              FROM {$t} t
@@ -805,7 +929,10 @@ class ANS_Tickets_Routes
             "SELECT d.nome, AVG(TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at)) AS avg_hours
              FROM {$t} t
              LEFT JOIN {$d} d ON t.departamento_id=d.id
-             WHERE t.status IN ('fechado','resolvido')
+             LEFT JOIN {$s} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug = REPLACE(t.status,'_','-')
+             LEFT JOIN {$s} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug = REPLACE(t.status,'_','-')
+             WHERE COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)=1
+                OR COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)=1
              GROUP BY d.nome",
             ARRAY_A
         );
@@ -849,6 +976,25 @@ class ANS_Tickets_Routes
         if (!$ticket_id) {
             return new WP_REST_Response(['error' => 'ticket_id obrigatório'], 400);
         }
+        // Restringe upload ao escopo de departamentos do atendente.
+        global $wpdb;
+        $t = ans_tickets_table('tickets');
+        $dept_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        if (!$is_manager) {
+            $ticket = $wpdb->get_row($wpdb->prepare("SELECT departamento_id FROM {$t} WHERE id=%d", $ticket_id), ARRAY_A);
+            if (!$ticket) {
+                return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
+            }
+            $allowed = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+            if (!$allowed || !in_array((int)$ticket['departamento_id'], $allowed, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+            }
+        }
         $file = $files['file'];
         if ($file['size'] > ans_tickets_max_file_size()) {
             return new WP_REST_Response(['error' => 'Arquivo excede o limite de 5MB'], 400);
@@ -868,7 +1014,6 @@ class ANS_Tickets_Routes
         if (is_wp_error($upload)) {
             return new WP_REST_Response(['error' => $upload->get_error_message()], 400);
         }
-        global $wpdb;
         $a = ans_tickets_table('anexos');
         $i = ans_tickets_table('interacoes');
         $interacao_id = $req->get_param('interacao_id') ? (int)$req->get_param('interacao_id') : null;
@@ -981,6 +1126,20 @@ class ANS_Tickets_Routes
         global $wpdb;
         $table = ans_tickets_table('departamentos');
         $table_users = ans_tickets_table('departamento_users');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+
+        // Atendentes: retornar apenas departamentos vinculados ao usuário
+        if (!$is_manager) {
+            $user_id = get_current_user_id();
+            return $wpdb->get_results($wpdb->prepare(
+                "SELECT d.* FROM {$table} d
+                 INNER JOIN {$table_users} du ON du.departamento_id=d.id
+                 WHERE du.user_id=%d
+                 ORDER BY d.ordem_fluxo ASC",
+                $user_id
+            ));
+        }
+
         $rows = $wpdb->get_results("SELECT * FROM {$table} ORDER BY ordem_fluxo ASC");
         
         foreach ($rows as &$row) {
@@ -1104,11 +1263,18 @@ class ANS_Tickets_Routes
         $table = ans_tickets_table('departamentos');
         $table_tickets = ans_tickets_table('tickets');
         $table_users = ans_tickets_table('departamento_users');
+        $table_status = ans_tickets_table('status_custom');
         $id = (int)$req['id'];
         
-        // Verificar se há tickets abertos
+        // Verificar se há tickets não-finalizados (status_custom por depto)
         $tickets_abertos = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM {$table_tickets} WHERE departamento_id=%d AND status NOT IN ('concluido', 'arquivado')",
+            "SELECT COUNT(*)
+             FROM {$table_tickets} t
+             LEFT JOIN {$table_status} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug = REPLACE(t.status,'_','-')
+             LEFT JOIN {$table_status} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug = REPLACE(t.status,'_','-')
+             WHERE t.departamento_id=%d
+             AND COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)=0
+             AND COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)=0",
             $id
         ));
         
@@ -1387,50 +1553,209 @@ class ANS_Tickets_Routes
     public static function admin_list_kanban(WP_REST_Request $req)
     {
         global $wpdb;
-        $statusParam = sanitize_text_field($req->get_param('status'));
-        $statusList = ans_tickets_statuses();
-        $status = in_array($statusParam, $statusList, true) ? $statusParam : 'aberto';
         $limit = (int)$req->get_param('per_page') ?: 30;
         $offset = (int)$req->get_param('offset') ?: 0;
+        $statusParam = sanitize_text_field($req->get_param('status'));
+        $depFilter = (int)$req->get_param('departamento_id');
 
         $t = ans_tickets_table('tickets');
         $c = ans_tickets_table('clientes');
         $d = ans_tickets_table('departamentos');
+        $dept_users = ans_tickets_table('departamento_users');
+        $s = ans_tickets_table('status_custom');
 
-        $where = ['t.status=%s'];
-        $params = [$status];
-        $filtersWhere = [];
-        $filtersParams = [];
-
-        if ($req->get_param('departamento_id')) {
-            $where[] = 't.departamento_id=%d';
-            $params[] = (int)$req->get_param('departamento_id');
-            $filtersWhere[] = 't.departamento_id=%d';
-            $filtersParams[] = (int)$req->get_param('departamento_id');
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        $allowed_departamentos = [];
+        if (!$is_manager) {
+            $allowed_departamentos = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
+            ));
+            $allowed_departamentos = array_values(array_unique(array_filter(array_map('intval', (array)$allowed_departamentos))));
+            if (!$allowed_departamentos) {
+                return [
+                    'items' => [],
+                    'status' => '',
+                    'counts' => [],
+                    'limit' => $limit,
+                    'offset' => $offset,
+                ];
+            }
         }
+
+        $globalRows = $wpdb->get_results("SELECT slug, inicial, final_resolvido, final_nao_resolvido FROM {$s} WHERE ativo=1 AND departamento_id IS NULL ORDER BY ordem ASC, nome ASC", ARRAY_A);
+        $globalSlugs = array_map(fn($r) => (string)$r['slug'], $globalRows ?: []);
+
+        // Escopo: atendentes veem apenas tickets dos seus departamentos vinculados.
+        $scopeWhere = [];
+        $scopeParams = [];
+        if (!$is_manager) {
+            $in = implode(',', array_fill(0, count($allowed_departamentos), '%d'));
+            $scopeWhere[] = "t.departamento_id IN ({$in})";
+            array_push($scopeParams, ...$allowed_departamentos);
+        }
+
+        // Filtros comuns (fora do status/departamento)
+        $baseWhere = [];
+        $baseParams = [];
         if ($req->get_param('responsavel_id')) {
-            $where[] = 't.responsavel_id=%d';
-            $params[] = (int)$req->get_param('responsavel_id');
-            $filtersWhere[] = 't.responsavel_id=%d';
-            $filtersParams[] = (int)$req->get_param('responsavel_id');
+            $baseWhere[] = 't.responsavel_id=%d';
+            $baseParams[] = (int)$req->get_param('responsavel_id');
         }
         if ($req->get_param('prioridade')) {
-            $where[] = 't.prioridade=%s';
-            $params[] = sanitize_text_field($req->get_param('prioridade'));
-            $filtersWhere[] = 't.prioridade=%s';
-            $filtersParams[] = sanitize_text_field($req->get_param('prioridade'));
+            $baseWhere[] = 't.prioridade=%s';
+            $baseParams[] = sanitize_text_field($req->get_param('prioridade'));
         }
         if ($req->get_param('documento')) {
-            $where[] = 'c.documento=%s';
-            $params[] = preg_replace('/\\D/', '', $req->get_param('documento'));
-            $filtersWhere[] = 'c.documento=%s';
-            $filtersParams[] = preg_replace('/\\D/', '', $req->get_param('documento'));
+            $baseWhere[] = 'c.documento=%s';
+            $baseParams[] = preg_replace('/\\D/', '', $req->get_param('documento'));
         }
         if ($req->get_param('protocolo')) {
-            $where[] = 't.protocolo=%s';
-            $params[] = sanitize_text_field($req->get_param('protocolo'));
-            $filtersWhere[] = 't.protocolo=%s';
-            $filtersParams[] = sanitize_text_field($req->get_param('protocolo'));
+            $baseWhere[] = 't.protocolo=%s';
+            $baseParams[] = sanitize_text_field($req->get_param('protocolo'));
+        }
+
+        // Modo por departamento (colunas do depto quando grupo estiver completo; caso contrário usa global).
+        if ($depFilter) {
+            if (!$is_manager && !in_array($depFilter, $allowed_departamentos, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao departamento'], 403);
+            }
+
+            $deptRows = $wpdb->get_results($wpdb->prepare(
+                "SELECT slug, inicial FROM {$s} WHERE ativo=1 AND departamento_id=%d ORDER BY ordem ASC, nome ASC",
+                $depFilter
+            ), ARRAY_A);
+            $deptSlugs = array_map(fn($r) => (string)$r['slug'], $deptRows ?: []);
+            $useDept = $deptSlugs && ans_tickets_status_group_ready($depFilter);
+            $groupSlugs = $useDept ? $deptSlugs : $globalSlugs;
+
+            if (!$groupSlugs) {
+                return [
+                    'items' => [],
+                    'status' => '',
+                    'counts' => [],
+                    'limit' => $limit,
+                    'offset' => $offset,
+                ];
+            }
+
+            // Status default: inicial do grupo (se existir), senão o primeiro.
+            $default = $groupSlugs[0];
+            foreach (($useDept ? $deptRows : $globalRows) as $row) {
+                if (!empty($row['inicial'])) {
+                    $default = (string)$row['slug'];
+                    break;
+                }
+            }
+
+            $status = in_array($statusParam, $groupSlugs, true) ? $statusParam : $default;
+            $status_alias = (strpos($status, '-') !== false) ? str_replace('-', '_', $status) : (strpos($status, '_') !== false ? str_replace('_', '-', $status) : $status);
+            $where = ["t.departamento_id=%d"];
+            $params = [$depFilter];
+
+            if ($status_alias !== $status) {
+                $where[] = 't.status IN (%s,%s)';
+                $params[] = $status;
+                $params[] = $status_alias;
+            } else {
+                $where[] = 't.status=%s';
+                $params[] = $status;
+            }
+
+            $where = array_merge($where, $scopeWhere, $baseWhere);
+            $params = array_merge($params, $scopeParams, $baseParams);
+
+            $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours, u.display_name AS responsavel_nome
+                    FROM {$t} t
+                    JOIN {$c} c ON t.cliente_id=c.id
+                    LEFT JOIN {$d} d ON t.departamento_id=d.id
+                    LEFT JOIN {$wpdb->users} u ON t.responsavel_id=u.ID
+                    WHERE " . implode(' AND ', $where) . "
+                    ORDER BY t.updated_at DESC
+                    LIMIT %d OFFSET %d";
+            $paramsItems = array_merge($params, [$limit, $offset]);
+            $items = $wpdb->get_results($wpdb->prepare($sql, $paramsItems));
+            foreach ($items as &$item) {
+                $item->status_label = ans_tickets_status_label_for($item->status, (int)$item->departamento_id);
+            }
+
+            // Counts por status (apenas do grupo atual)
+            $countsSql = "SELECT status, COUNT(*) as total
+                          FROM {$t} t
+                          LEFT JOIN {$c} c ON t.cliente_id=c.id
+                          WHERE " . implode(' AND ', array_merge(["t.departamento_id=%d"], $scopeWhere, $baseWhere)) . "
+                          GROUP BY status";
+            $countsParams = array_merge([$depFilter], $scopeParams, $baseParams);
+            $countsRaw = $wpdb->get_results($wpdb->prepare($countsSql, $countsParams), ARRAY_A);
+            $allowedKeys = array_flip(array_map(fn($s) => ans_tickets_status_key($s), $groupSlugs));
+            $counts = array_values(array_filter($countsRaw, function ($row) use ($allowedKeys) {
+                return isset($allowedKeys[ans_tickets_status_key((string)($row['status'] ?? ''))]);
+            }));
+
+            return [
+                'items' => $items,
+                'status' => $status,
+                'counts' => $counts,
+                'limit' => $limit,
+                'offset' => $offset,
+            ];
+        }
+
+        // Modo global: colunas do grupo global e tickets categorizados por flags (inicial/meio/finais).
+        if (!$globalSlugs) {
+            return [
+                'items' => [],
+                'status' => '',
+                'counts' => [],
+                'limit' => $limit,
+                'offset' => $offset,
+            ];
+        }
+
+        $globalInitial = $globalSlugs[0];
+        $globalFinalOk = '';
+        $globalFinalNok = '';
+        foreach ($globalRows as $row) {
+            if (!empty($row['inicial'])) {
+                $globalInitial = (string)$row['slug'];
+            }
+            if (!empty($row['final_resolvido'])) {
+                $globalFinalOk = (string)$row['slug'];
+            }
+            if (!empty($row['final_nao_resolvido'])) {
+                $globalFinalNok = (string)$row['slug'];
+            }
+        }
+        $status = in_array($statusParam, $globalSlugs, true) ? $statusParam : $globalInitial;
+        $key = ans_tickets_status_key($status);
+
+        $cat = 'middle';
+        if ($key === ans_tickets_status_key($globalInitial)) {
+            $cat = 'initial';
+        } elseif ($globalFinalOk && $key === ans_tickets_status_key($globalFinalOk)) {
+            $cat = 'final_ok';
+        } elseif ($globalFinalNok && $key === ans_tickets_status_key($globalFinalNok)) {
+            $cat = 'final_nok';
+        }
+
+        $where = array_merge($scopeWhere, $baseWhere);
+        $params = array_merge($scopeParams, $baseParams);
+
+        $canonStatus = "REPLACE(t.status,'_','-')";
+        $joinStatus = "LEFT JOIN {$s} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug={$canonStatus}
+                       LEFT JOIN {$s} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug={$canonStatus}";
+        $inicial = "COALESCE(s_dep.inicial, s_glob.inicial, 0)";
+        $finalOk = "COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)";
+        $finalNok = "COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)";
+
+        if ($cat === 'initial') {
+            $where[] = "{$inicial}=1";
+        } elseif ($cat === 'final_ok') {
+            $where[] = "{$finalOk}=1";
+        } elseif ($cat === 'final_nok') {
+            $where[] = "{$finalNok}=1";
+        } else {
+            $where[] = "{$inicial}=0 AND {$finalOk}=0 AND {$finalNok}=0";
         }
 
         $sql = "SELECT t.id, t.protocolo, t.assunto, t.status, t.prioridade, t.departamento_id, t.responsavel_id, t.created_at, t.updated_at, c.nome_completo, d.nome AS departamento_nome, d.sla_hours, u.display_name AS responsavel_nome
@@ -1438,20 +1763,40 @@ class ANS_Tickets_Routes
                 JOIN {$c} c ON t.cliente_id=c.id
                 LEFT JOIN {$d} d ON t.departamento_id=d.id
                 LEFT JOIN {$wpdb->users} u ON t.responsavel_id=u.ID
-                WHERE " . implode(' AND ', $where) . "
+                {$joinStatus}
+                " . ($where ? ("WHERE " . implode(' AND ', $where)) : '') . "
                 ORDER BY t.updated_at DESC
                 LIMIT %d OFFSET %d";
-        $params[] = $limit;
-        $params[] = $offset;
-        $prepared = $wpdb->prepare($sql, $params);
+        $itemsParams = array_merge($params, [$limit, $offset]);
+        $prepared = $params ? $wpdb->prepare($sql, $itemsParams) : $wpdb->prepare($sql, [$limit, $offset]);
         $items = $wpdb->get_results($prepared);
         foreach ($items as &$item) {
             $item->status_label = ans_tickets_status_label_for($item->status, (int)$item->departamento_id);
         }
 
-        $whereCounts = $filtersWhere ? ('WHERE ' . implode(' AND ', $filtersWhere)) : '';
-        $countsSql = "SELECT status, COUNT(*) as total FROM {$t} t LEFT JOIN {$c} c ON t.cliente_id=c.id {$whereCounts} GROUP BY status";
-        $counts = $filtersParams ? $wpdb->get_results($wpdb->prepare($countsSql, $filtersParams), ARRAY_A) : $wpdb->get_results($countsSql, ARRAY_A);
+        $countsSql = "SELECT
+                        SUM(CASE WHEN {$inicial}=1 THEN 1 ELSE 0 END) AS inicial,
+                        SUM(CASE WHEN {$finalOk}=1 THEN 1 ELSE 0 END) AS final_ok,
+                        SUM(CASE WHEN {$finalNok}=1 THEN 1 ELSE 0 END) AS final_nok,
+                        SUM(CASE WHEN {$inicial}=0 AND {$finalOk}=0 AND {$finalNok}=0 THEN 1 ELSE 0 END) AS meio
+                      FROM {$t} t
+                      LEFT JOIN {$c} c ON t.cliente_id=c.id
+                      {$joinStatus}
+                      " . ($scopeWhere || $baseWhere ? ("WHERE " . implode(' AND ', array_merge($scopeWhere, $baseWhere))) : '');
+        $countsRow = $params ? $wpdb->get_row($wpdb->prepare($countsSql, $params), ARRAY_A) : $wpdb->get_row($countsSql, ARRAY_A);
+        $counts = [];
+        foreach ($globalSlugs as $slug) {
+            $k2 = ans_tickets_status_key($slug);
+            if ($k2 === ans_tickets_status_key($globalInitial)) {
+                $counts[] = ['status' => $slug, 'total' => (int)($countsRow['inicial'] ?? 0)];
+            } elseif ($globalFinalOk && $k2 === ans_tickets_status_key($globalFinalOk)) {
+                $counts[] = ['status' => $slug, 'total' => (int)($countsRow['final_ok'] ?? 0)];
+            } elseif ($globalFinalNok && $k2 === ans_tickets_status_key($globalFinalNok)) {
+                $counts[] = ['status' => $slug, 'total' => (int)($countsRow['final_nok'] ?? 0)];
+            } else {
+                $counts[] = ['status' => $slug, 'total' => (int)($countsRow['meio'] ?? 0)];
+            }
+        }
 
         return [
             'items' => $items,
@@ -1484,6 +1829,7 @@ class ANS_Tickets_Routes
         $t = ans_tickets_table('tickets');
         $d = ans_tickets_table('departamentos');
         $i = ans_tickets_table('interacoes');
+        $s = ans_tickets_table('status_custom');
         $users = $wpdb->users;
 
         $firstResponseDept = $wpdb->get_results(
@@ -1514,15 +1860,18 @@ class ANS_Tickets_Routes
             ARRAY_A
         );
 
-        $slaResumo = $wpdb->get_row(
-            "SELECT 
-                SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) <= d.sla_hours THEN 1 ELSE 0 END) AS cumprido,
-                SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) > d.sla_hours THEN 1 ELSE 0 END) AS estourado
-             FROM {$t} t
-             LEFT JOIN {$d} d ON t.departamento_id=d.id
-             WHERE t.status IN ('fechado','resolvido','concluido')",
-            ARRAY_A
-        );
+	       $slaResumo = $wpdb->get_row(
+	           "SELECT 
+	               SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) <= d.sla_hours THEN 1 ELSE 0 END) AS cumprido,
+	               SUM(CASE WHEN d.sla_hours IS NOT NULL AND d.sla_hours > 0 AND TIMESTAMPDIFF(HOUR, t.created_at, t.updated_at) > d.sla_hours THEN 1 ELSE 0 END) AS estourado
+	            FROM {$t} t
+	            LEFT JOIN {$d} d ON t.departamento_id=d.id
+	            LEFT JOIN {$s} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug = REPLACE(t.status,'_','-')
+	            LEFT JOIN {$s} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug = REPLACE(t.status,'_','-')
+	            WHERE COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)=1
+	               OR COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)=1",
+	           ARRAY_A
+	       );
 
         $porAssunto = $wpdb->get_results("SELECT assunto, COUNT(*) as total FROM {$t} GROUP BY assunto", ARRAY_A);
 
@@ -1610,13 +1959,44 @@ class ANS_Tickets_Routes
         global $wpdb;
         $table = ans_tickets_table('status_custom');
         $dep = (int)$req->get_param('departamento_id');
-        if ($dep) {
-            return $wpdb->get_results($wpdb->prepare(
-                "SELECT * FROM {$table} WHERE ativo=1 AND (departamento_id=%d OR departamento_id IS NULL) ORDER BY ordem ASC, nome ASC",
-                $dep
+        $include_global = $req->get_param('include_global') ? 1 : 0;
+        $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
+        $dept_users = ans_tickets_table('departamento_users');
+
+        // Atendentes só podem pedir status de departamentos vinculados (global é sempre permitido).
+        if ($dep && !$is_manager) {
+            $allowed = $wpdb->get_col($wpdb->prepare(
+                "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+                get_current_user_id()
             ));
+            $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+            if (!$allowed || !in_array($dep, $allowed, true)) {
+                return new WP_REST_Response(['error' => 'Sem acesso ao departamento'], 403);
+            }
         }
-        return $wpdb->get_results("SELECT * FROM {$table} WHERE ativo=1 ORDER BY ordem ASC, nome ASC");
+
+        // Grupo global (fallback padrão)
+        $global = $wpdb->get_results("SELECT * FROM {$table} WHERE ativo=1 AND departamento_id IS NULL ORDER BY ordem ASC, nome ASC");
+        if (!$dep) {
+            // Sem departamento selecionado: retorna o grupo global (se existir).
+            return $global ?: [];
+        }
+
+        // Departamento selecionado: só usa o grupo do departamento quando estiver "pronto".
+        $deptRows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE ativo=1 AND departamento_id=%d ORDER BY ordem ASC, nome ASC",
+            $dep
+        ));
+
+        if ($deptRows && ans_tickets_status_group_ready($dep)) {
+            if ($include_global && $is_manager && $global) {
+                return array_merge($deptRows, $global);
+            }
+            return $deptRows;
+        }
+
+        // Ainda sem grupo completo no departamento: usa global (ou o que tiver no depto se não houver global).
+        return $global ?: ($deptRows ?: []);
     }
 
     public static function admin_create_status_custom(WP_REST_Request $req)
@@ -1629,6 +2009,7 @@ class ANS_Tickets_Routes
         if (!$slug || !$nome) {
             return new WP_REST_Response(['error' => 'slug e nome são obrigatórios'], 400);
         }
+        $should_migrate = $dep ? true : false;
         $insert = $wpdb->insert($table, [
             'departamento_id' => $dep,
             'slug' => $slug,
@@ -1645,6 +2026,9 @@ class ANS_Tickets_Routes
         }
         $id = $wpdb->insert_id;
         self::reset_status_flags($id, $dep, $req);
+        if ($should_migrate) {
+            ans_tickets_migrate_tickets_from_global_to_departamento((int)$dep);
+        }
         return ['id' => $wpdb->insert_id];
     }
 
@@ -1692,7 +2076,12 @@ class ANS_Tickets_Routes
         if ($ok === false) {
             return new WP_REST_Response(['error' => 'Erro ao atualizar status'], 500);
         }
-        self::reset_status_flags($id, $req->get_param('departamento_id') ? (int)$req->get_param('departamento_id') : null, $req);
+        $rowDep = $wpdb->get_var($wpdb->prepare("SELECT departamento_id FROM {$table} WHERE id=%d", $id));
+        $dep = $rowDep !== null ? (int)$rowDep : null;
+        self::reset_status_flags($id, $dep, $req);
+        if ($dep) {
+            ans_tickets_migrate_tickets_from_global_to_departamento($dep);
+        }
         return ['status' => 'ok'];
     }
 

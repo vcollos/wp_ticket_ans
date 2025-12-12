@@ -26,14 +26,20 @@ class ANS_Tickets_Cron
         $tickets_table = ans_tickets_table('tickets');
         $dept_table = ans_tickets_table('departamentos');
         $inter_table = ans_tickets_table('interacoes');
+        $status_table = ans_tickets_table('status_custom');
 
         $rows = $wpdb->get_results(
-            "SELECT t.id, t.protocolo, t.responsavel_id, t.created_at, t.status, d.nome AS departamento_nome, d.sla_hours
+            "SELECT t.id, t.protocolo, t.responsavel_id, t.created_at, t.status, t.departamento_id, d.nome AS departamento_nome, d.sla_hours,
+                    COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0) AS final_resolvido,
+                    COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0) AS final_nao_resolvido
              FROM {$tickets_table} t
              LEFT JOIN {$dept_table} d ON t.departamento_id = d.id
+             LEFT JOIN {$status_table} s_dep ON s_dep.ativo=1 AND s_dep.departamento_id=t.departamento_id AND s_dep.slug = REPLACE(t.status,'_','-')
+             LEFT JOIN {$status_table} s_glob ON s_glob.ativo=1 AND s_glob.departamento_id IS NULL AND s_glob.slug = REPLACE(t.status,'_','-')
              WHERE d.sla_hours IS NOT NULL
              AND d.sla_hours > 0
-             AND t.status NOT IN ('resolvido','fechado','arquivado','aguardando_acao')",
+             AND COALESCE(s_dep.final_resolvido, s_glob.final_resolvido, 0)=0
+             AND COALESCE(s_dep.final_nao_resolvido, s_glob.final_nao_resolvido, 0)=0",
             ARRAY_A
         );
 
@@ -54,17 +60,18 @@ class ANS_Tickets_Cron
     private static function update_to_sla_breach(array $row, string $tickets_table, string $inter_table): void
     {
         global $wpdb;
-        $wpdb->update(
-            $tickets_table,
-            [
-                'status' => 'aguardando_acao',
-                'updated_at' => current_time('mysql'),
-            ],
-            ['id' => (int)$row['id']]
-        );
+        // Evita spam: cria só 1 registro de SLA estourado por ticket.
+        $already = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$inter_table} WHERE ticket_id=%d AND autor_tipo='sistema' AND interno=1 AND mensagem LIKE %s LIMIT 1",
+            (int)$row['id'],
+            'SLA estourado (%'
+        ));
+        if ($already) {
+            return;
+        }
 
         $message = sprintf(
-            'SLA estourado (%.1fh / SLA %sh) no departamento %s. Status alterado para aguardando_acao automaticamente.',
+            'SLA estourado (%.1fh / SLA %sh) no departamento %s.',
             (time() - strtotime($row['created_at'])) / 3600,
             $row['sla_hours'],
             $row['departamento_nome'] ?? 'N/A'
@@ -77,6 +84,14 @@ class ANS_Tickets_Cron
             'mensagem' => $message,
             'interno' => 1,
         ]);
+
+        $wpdb->update(
+            $tickets_table,
+            [
+                'updated_at' => current_time('mysql'),
+            ],
+            ['id' => (int)$row['id']]
+        );
 
         if (!empty($row['responsavel_id'])) {
             self::notify_agent((int)$row['responsavel_id'], $row['protocolo'], $message);
