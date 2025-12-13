@@ -158,6 +158,7 @@ class ANS_Tickets_Admin
                 <div class="ans-config-card ans-card-highlight">
                     <h2>Shortcodes</h2>
                     <p class="description">Copie e cole nos formulários/páginas.</p>
+                    <div class="ans-shortcode-row"><code>[ans_ticket_portal]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_portal]">Copiar</button></div>
                     <div class="ans-shortcode-row"><code>[ans_ticket_form]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_form]">Copiar</button></div>
                     <div class="ans-shortcode-row"><code>[ans_ticket_track]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_track]">Copiar</button></div>
                     <div class="ans-shortcode-row"><code>[ans_ticket_dashboard]</code><button class="button button-secondary ans-copy" data-code="[ans_ticket_dashboard]">Copiar</button></div>

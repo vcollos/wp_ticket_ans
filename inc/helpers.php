@@ -234,6 +234,43 @@ function ans_tickets_migrate_tickets_from_global_to_departamento(int $departamen
     return $migrated;
 }
 
+function ans_tickets_pick_departamento_status_by_flag(int $departamento_id, string $flag): ?string
+{
+    global $wpdb;
+    $statusTable = ans_tickets_table('status_custom');
+    if (!$wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $statusTable))) {
+        return null;
+    }
+    if (!ans_tickets_status_group_ready($departamento_id)) {
+        return null;
+    }
+    if ($flag === 'inicial') {
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT slug FROM {$statusTable} WHERE ativo=1 AND departamento_id=%d AND inicial=1 ORDER BY ordem ASC LIMIT 1",
+            $departamento_id
+        )) ?: null;
+    }
+    if ($flag === 'final_resolvido') {
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT slug FROM {$statusTable} WHERE ativo=1 AND departamento_id=%d AND final_resolvido=1 ORDER BY ordem ASC LIMIT 1",
+            $departamento_id
+        )) ?: null;
+    }
+    if ($flag === 'final_nao_resolvido') {
+        return $wpdb->get_var($wpdb->prepare(
+            "SELECT slug FROM {$statusTable} WHERE ativo=1 AND departamento_id=%d AND final_nao_resolvido=1 ORDER BY ordem ASC LIMIT 1",
+            $departamento_id
+        )) ?: null;
+    }
+    // middle (sem flags)
+    return $wpdb->get_var($wpdb->prepare(
+        "SELECT slug FROM {$statusTable}
+         WHERE ativo=1 AND departamento_id=%d AND inicial=0 AND final_resolvido=0 AND final_nao_resolvido=0
+         ORDER BY ordem ASC, nome ASC LIMIT 1",
+        $departamento_id
+    )) ?: null;
+}
+
 function ans_tickets_status_label_for(string $slug, ?int $departamento_id = null): string
 {
     global $wpdb;

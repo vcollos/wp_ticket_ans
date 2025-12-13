@@ -330,8 +330,8 @@
       html += '<div class="ans-recovered-list">';
       data.tickets.forEach(t=>{
         html += '<div class="ans-recovered-card">';
-        html += '<div class="ans-recovered-top"><span class="ans-proto">'+t.protocolo+'</span>'+statusBadge(t.status)+'</div>';
-        html += '<div class="ans-recovered-meta">'+statusLabel(t.status)+'</div>';
+        html += '<div class="ans-recovered-top"><span class="ans-proto">'+t.protocolo+'</span>'+statusBadge(t.status, t.status_label)+'</div>';
+        html += '<div class="ans-recovered-meta">'+statusLabel(t.status, t.status_label)+'</div>';
         html += '<div class="ans-recovered-meta">'+(t.departamento_nome||'')+'</div>';
         html += '<button type="button" class="ans-btn ans-btn-ghost" onclick="viewTicket(\''+t.protocolo+'\', \''+data.cliente.documento+'\')">Abrir e responder</button>';
         html += '</div>';
@@ -346,6 +346,9 @@
   window.viewTicket = function(protocolo, documento){
     const form = document.querySelector('#ans-ticket-track .track-form');
     if(form){
+      if (window.ansTicketPortal && typeof window.ansTicketPortal.select === 'function') {
+        window.ansTicketPortal.select('ans-ticket-track');
+      }
       form.querySelector('[name="protocolo"]').value = protocolo;
       form.querySelector('[name="documento"]').value = documento;
       form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
@@ -353,16 +356,83 @@
   };
 
   function setupTabs(){
-    // Tabs desativadas: telas separadas (Novo Chamado / Meus Chamados).
+    const form = document.getElementById('ans-ticket-form');
+    const track = document.getElementById('ans-ticket-track');
+    const recover = document.getElementById('ans-ticket-recover');
+    const panels = [
+      form ? {id: 'ans-ticket-form', label: 'Abrir novo chamado', el: form} : null,
+      track ? {id: 'ans-ticket-track', label: 'Já tenho protocolo', el: track} : null,
+      recover ? {id: 'ans-ticket-recover', label: 'Não sei o protocolo', el: recover} : null,
+    ].filter(Boolean);
+
+    if (panels.length <= 1) return;
+
+    const first = panels[0].el;
+    const parent = first.parentNode;
+    if (!parent) return;
+    if (parent.querySelector('.ans-portal-nav')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ans-portal';
+    const nav = document.createElement('div');
+    nav.className = 'ans-portal-nav';
+    nav.setAttribute('role', 'tablist');
+
+    const panelsHost = document.createElement('div');
+    panelsHost.className = 'ans-portal-panels';
+
+    parent.insertBefore(wrapper, first);
+    wrapper.appendChild(nav);
+    wrapper.appendChild(panelsHost);
+
+    function select(panelId) {
+      panels.forEach((p) => {
+        const active = p.id === panelId;
+        p.el.hidden = !active;
+        p.el.classList.toggle('is-active', active);
+        const btn = nav.querySelector(`button[data-panel="${p.id}"]`);
+        if (btn) {
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+          btn.tabIndex = active ? 0 : -1;
+        }
+      });
+    }
+
+    panels.forEach((p, idx) => {
+      p.el.setAttribute('role', 'tabpanel');
+      p.el.classList.add('ans-portal-panel');
+      panelsHost.appendChild(p.el);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ans-portal-tab';
+      btn.textContent = p.label;
+      btn.dataset.panel = p.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-controls', p.id);
+      btn.setAttribute('aria-selected', 'false');
+      btn.tabIndex = -1;
+      btn.addEventListener('click', () => select(p.id));
+      nav.appendChild(btn);
+
+      if (idx === 0) {
+        btn.tabIndex = 0;
+      }
+    });
+
+    window.ansTicketPortal = { select };
+
+    // Padrão: Abrir novo chamado (se existir), senão consultar.
+    select(form ? 'ans-ticket-form' : 'ans-ticket-track');
   }
 
   document.addEventListener('DOMContentLoaded', ()=>{
     loadDepartamentos();
+    setupTabs();
     ticketForm();
     trackForm();
     recoverForm();
     toggleAssistFields();
-    setupTabs();
     const select = document.getElementById('ans-assunto');
     if (select) {
         select.addEventListener('change', toggleAssistFields);

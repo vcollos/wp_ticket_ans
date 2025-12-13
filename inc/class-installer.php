@@ -236,7 +236,7 @@ CREATE TABLE {$prefix}respostas_rapidas_links (
         }
 
         // Criar páginas SAC e Controle de Chamados se não existirem
-        self::maybe_create_page('sac', 'SAC', "[ans_ticket_form]\n[ans_ticket_track]");
+        self::maybe_create_page('sac', 'SAC', "[ans_ticket_portal]");
         self::maybe_create_page('controle-de-chamados', 'Controle de Chamados', "[ans_ticket_dashboard]");
         if (!wp_next_scheduled('ans_tickets_sla_cron')) {
             wp_schedule_event(time(), 'ans_tickets_5min', 'ans_tickets_sla_cron');

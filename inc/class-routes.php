@@ -723,15 +723,21 @@ class ANS_Tickets_Routes
         global $wpdb;
         $t = ans_tickets_table('tickets');
         $dept_users = ans_tickets_table('departamento_users');
+        $departamentos_table = ans_tickets_table('departamentos');
+        $interacoes_table = ans_tickets_table('interacoes');
         $is_manager = current_user_can('manage_options') || ans_tickets_can_manage();
         $data = [];
 
-        $ticket = $wpdb->get_row($wpdb->prepare("SELECT departamento_id FROM {$t} WHERE id=%d", (int)$req['id']), ARRAY_A);
+        $ticket = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, departamento_id, status, prioridade, responsavel_id FROM {$t} WHERE id=%d",
+            (int)$req['id']
+        ), ARRAY_A);
         if (!$ticket) {
             return new WP_REST_Response(['error' => 'Ticket não encontrado'], 404);
         }
         $current_dep_id = (int)$ticket['departamento_id'];
         $target_dep_id = $req->get_param('departamento_id') ? (int)$req->get_param('departamento_id') : $current_dep_id;
+        $kanban_global = $req->get_param('kanban_global') ? 1 : 0;
         $allowed_deps = [];
         if (!$is_manager) {
             $allowed_deps = $wpdb->get_col($wpdb->prepare(
@@ -749,6 +755,35 @@ class ANS_Tickets_Routes
             $s = ans_tickets_table('status_custom');
             $canon = str_replace('_', '-', $status);
             $effective_group = ans_tickets_effective_status_group_departamento_id($target_dep_id);
+
+            // No Kanban "global" (sem depto selecionado), o front envia slug do grupo global.
+            // Se o depto do ticket já tiver grupo próprio "ready", remapeia para o status equivalente do departamento por flag.
+            if ($kanban_global && $effective_group) {
+                $glob = $wpdb->get_row($wpdb->prepare(
+                    "SELECT inicial, final_resolvido, final_nao_resolvido FROM {$s} WHERE ativo=1 AND departamento_id IS NULL AND slug=%s LIMIT 1",
+                    $canon
+                ), ARRAY_A);
+                if (!$glob) {
+                    return new WP_REST_Response(['error' => 'Status inválido (grupo global)'], 400);
+                }
+                if (!empty($glob['inicial'])) {
+                    $flag = 'inicial';
+                } elseif (!empty($glob['final_resolvido'])) {
+                    $flag = 'final_resolvido';
+                } elseif (!empty($glob['final_nao_resolvido'])) {
+                    $flag = 'final_nao_resolvido';
+                } else {
+                    $flag = 'middle';
+                }
+                $mapped = ans_tickets_pick_departamento_status_by_flag($target_dep_id, $flag);
+                if (!$mapped) {
+                    $mapped = ans_tickets_pick_departamento_status_by_flag($target_dep_id, 'inicial');
+                }
+                if ($mapped) {
+                    $canon = $mapped;
+                }
+            }
+
             if ($effective_group) {
                 $exists = $wpdb->get_var($wpdb->prepare(
                     "SELECT id FROM {$s} WHERE ativo=1 AND departamento_id=%d AND slug=%s LIMIT 1",
@@ -782,11 +817,62 @@ class ANS_Tickets_Routes
         if (empty($data)) {
             return new WP_REST_Response(['error' => 'Nada para atualizar'], 400);
         }
+
+        $changes = [];
+        if (array_key_exists('status', $data) && $data['status'] !== (string)$ticket['status']) {
+            $changes['status'] = [(string)$ticket['status'], (string)$data['status']];
+        }
+        if (array_key_exists('prioridade', $data) && $data['prioridade'] !== (string)$ticket['prioridade']) {
+            $changes['prioridade'] = [(string)$ticket['prioridade'], (string)$data['prioridade']];
+        }
+        if (array_key_exists('responsavel_id', $data) && (int)$data['responsavel_id'] !== (int)$ticket['responsavel_id']) {
+            $changes['responsavel_id'] = [(int)$ticket['responsavel_id'], (int)$data['responsavel_id']];
+        }
+        if (array_key_exists('departamento_id', $data) && (int)$data['departamento_id'] !== (int)$ticket['departamento_id']) {
+            $changes['departamento_id'] = [(int)$ticket['departamento_id'], (int)$data['departamento_id']];
+        }
+
         $data['updated_at'] = current_time('mysql');
         $updated = $wpdb->update($t, $data, ['id' => (int)$req['id']]);
         if ($updated === false) {
             return new WP_REST_Response(['error' => 'Falha ao atualizar'], 500);
         }
+
+        // Log interno para auditoria/tempo entre fases.
+        if (!empty($changes)) {
+            $actor = wp_get_current_user();
+            $actorName = $actor && !empty($actor->display_name) ? $actor->display_name : 'Atendente';
+            $parts = [];
+            if (isset($changes['departamento_id'])) {
+                $oldName = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$departamentos_table} WHERE id=%d", (int)$changes['departamento_id'][0])) ?: 'N/A';
+                $newName = $wpdb->get_var($wpdb->prepare("SELECT nome FROM {$departamentos_table} WHERE id=%d", (int)$changes['departamento_id'][1])) ?: 'N/A';
+                $parts[] = sprintf('Departamento: %s → %s', $oldName, $newName);
+            }
+            if (isset($changes['status'])) {
+                $oldLabel = ans_tickets_status_label_for((string)$changes['status'][0], $current_dep_id);
+                $newLabel = ans_tickets_status_label_for((string)$changes['status'][1], $target_dep_id);
+                $parts[] = sprintf('Status: %s → %s', $oldLabel, $newLabel);
+            }
+            if (isset($changes['prioridade'])) {
+                $parts[] = sprintf('Prioridade: %s → %s', $changes['prioridade'][0] ?: 'N/A', $changes['prioridade'][1] ?: 'N/A');
+            }
+            if (isset($changes['responsavel_id'])) {
+                $oldUser = !empty($changes['responsavel_id'][0]) ? get_user_by('id', (int)$changes['responsavel_id'][0]) : null;
+                $newUser = !empty($changes['responsavel_id'][1]) ? get_user_by('id', (int)$changes['responsavel_id'][1]) : null;
+                $oldName = $oldUser ? ($oldUser->display_name ?: $oldUser->user_login) : 'Sem responsável';
+                $newName = $newUser ? ($newUser->display_name ?: $newUser->user_login) : 'Sem responsável';
+                $parts[] = sprintf('Responsável: %s → %s', $oldName, $newName);
+            }
+            $msg = sprintf('Alteração por %s: %s', $actorName, implode(' | ', $parts));
+            $wpdb->insert($interacoes_table, [
+                'ticket_id' => (int)$req['id'],
+                'autor_tipo' => 'usuario',
+                'autor_id' => get_current_user_id(),
+                'mensagem' => $msg,
+                'interno' => 1,
+            ]);
+        }
+
         return ['status' => 'ok'];
     }
 

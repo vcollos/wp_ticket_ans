@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.7.10
+ * Version: 0.7.12
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.7.10');
+define('ANS_TICKETS_VERSION', '0.7.12');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -161,6 +161,12 @@ add_shortcode('ans_ticket_kanban', function () {
     </div>
     <?php
     return ob_get_clean();
+});
+
+// Shortcode: portal do beneficiário (UX unificada)
+add_shortcode('ans_ticket_portal', function () {
+    // Reaproveita os shortcodes existentes; o frontend (embed.js) unifica a experiência em uma única tela.
+    return do_shortcode('[ans_ticket_form][ans_ticket_track]');
 });
 
 // Shortcode: acompanhamento

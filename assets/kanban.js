@@ -60,16 +60,12 @@
 
   function priorityClass(p){ return p==='alta'?'pri-alta':(p==='baixa'?'pri-baixa':'pri-media'); }
 
-  function canDrag(){
-    return !!(filters.dep && filters.dep.value);
-  }
-
   function renderCard(item){
     const pct = slaPct(item.created_at, item.sla_hours||0);
     const resp = item.responsavel_nome || 'Sem responsável';
     const card = document.createElement('article');
     card.className='kanban-card';
-    card.draggable = canDrag();
+    card.draggable = true;
     card.dataset.id = item.id;
     card.dataset.status = item.status;
     const label = item.status_label || labelFromSlug(item.status);
@@ -84,14 +80,12 @@
       <div class="status-pill">${label}</div>
       <div class="sla"><span style="width:${pct}%"></span></div>
     `;
-    if(card.draggable){
-      card.addEventListener('dragstart', (ev)=>{
-        ev.dataTransfer.setData('text/plain', String(item.id));
-        ev.dataTransfer.effectAllowed='move';
-        setTimeout(()=>card.classList.add('dragging'),0);
-      });
-      card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
-    }
+    card.addEventListener('dragstart', (ev)=>{
+      ev.dataTransfer.setData('text/plain', String(item.id));
+      ev.dataTransfer.effectAllowed='move';
+      setTimeout(()=>card.classList.add('dragging'),0);
+    });
+    card.addEventListener('dragend', ()=>card.classList.remove('dragging'));
     card.addEventListener('click', ()=>openDetail(item.id));
     return card;
   }
@@ -114,13 +108,11 @@
       `;
       const list = col.querySelector('.kanban-list');
       list.addEventListener('dragover',(ev)=>{
-        if(!canDrag()) return;
         ev.preventDefault();
         list.classList.add('drag-over');
       });
       list.addEventListener('dragleave',()=>list.classList.remove('drag-over'));
       list.addEventListener('drop',(ev)=>{
-        if(!canDrag()) return;
         ev.preventDefault();
         list.classList.remove('drag-over');
         const id = parseInt(ev.dataTransfer.getData('text/plain'),10);
@@ -137,7 +129,11 @@
       await fetchJSON(`${api}/admin/tickets/${id}`,{
         method:'PATCH',
         headers: headers(),
-        body: JSON.stringify({status})
+        body: JSON.stringify({
+          status,
+          // no modo global (sem depto selecionado), o backend remapeia para o grupo efetivo do ticket
+          kanban_global: (!filters.dep || !filters.dep.value) ? 1 : 0,
+        })
       });
       reloadBoard();
     }catch(err){

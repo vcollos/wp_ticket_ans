@@ -1,4 +1,4 @@
-# ANS Tickets (Uniodonto) – v0.7.10
+# ANS Tickets (Uniodonto) – v0.7.12
 
 Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-end para beneficiários e painel (wp-admin ou página pública) para atendentes.
 
@@ -21,9 +21,10 @@ Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-en
 ## Instalação
 1. Suba a pasta `ans-tickets` para `wp-content/plugins/` ou instale o zip.
 2. Ative o plugin.
-3. O instalador cria as páginas SAC e Controle de Chamados; use-as ou insira os shortcodes nas páginas desejadas.
+3. O instalador cria as páginas SAC (portal do beneficiário) e Controle de Chamados; use-as ou insira os shortcodes nas páginas desejadas.
 
 ## Shortcodes
+- `[ans_ticket_portal]` – Portal do beneficiário (Abrir chamado / Tenho protocolo / Não sei o protocolo).
 - `[ans_ticket_form]` – Formulário de abertura.
 - `[ans_ticket_track]` – Acompanhar/recuperar chamados.
 - `[ans_ticket_dashboard]` – Dashboard para atendentes (login WP obrigatório).
@@ -82,4 +83,4 @@ Tabelas personalizadas: `ans_operadora`, `ans_departamentos`, `ans_clientes` (wh
 - Cron de SLA a cada 5 minutos: registra nota interna e notifica responsável quando o SLA estoura (sem forçar um status fixo).
 
 ## Versão
-- Atual: **0.7.10**
+- Atual: **0.7.12**

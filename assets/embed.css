@@ -53,6 +53,16 @@
 .ans-tab-panel{display:none}
 .ans-tab-panel.active{display:block}
 
+/* Portal (beneficiário) */
+.ans-portal{margin-bottom:18px}
+.ans-portal-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:0 0 14px}
+.ans-portal-tab{border:1px solid var(--ans-border);background:#fff;padding:14px 12px;border-radius:12px;font-weight:800;color:var(--ans-text);cursor:pointer;transition:all .15s;box-shadow:0 6px 16px rgba(0,0,0,0.04)}
+.ans-portal-tab:hover{transform:translateY(-1px);border-color:#cfd6de}
+.ans-portal-tab[aria-selected="true"]{background:var(--ans-primary);color:#fff;border-color:var(--ans-primary);box-shadow:0 10px 24px rgba(122,0,60,0.18);transform:none}
+.ans-portal-tab:focus{outline:2px solid rgba(166,0,105,0.25);outline-offset:2px}
+.ans-portal-panel[hidden]{display:none !important}
+.ans-portal #ans-ticket-recover{margin-top:0 !important}
+
 /* Track / recovered */
 #ans-ticket-track form,#ans-ticket-recover .recover-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 18px;align-items:end;padding:6px 0}
 #ans-ticket-track label,#ans-ticket-recover label{font-weight:600;color:var(--ans-text);display:flex;flex-direction:column;gap:8px}
