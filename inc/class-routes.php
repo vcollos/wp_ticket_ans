@@ -1265,6 +1265,22 @@ class ANS_Tickets_Routes
         $a = ans_tickets_table('anexos');
         $i = ans_tickets_table('interacoes');
         $interacao_id = $req->get_param('interacao_id') ? (int)$req->get_param('interacao_id') : null;
+
+        // Se não informar uma interação, cria uma pública para vincular o anexo e exibir ao cliente.
+        if (!$interacao_id) {
+            $inserted = $wpdb->insert($i, [
+                'ticket_id' => $ticket_id,
+                'autor_tipo' => 'usuario',
+                'autor_id' => get_current_user_id(),
+                'mensagem' => 'Anexo enviado.',
+                'interno' => 0,
+            ]);
+            if ($inserted === false) {
+                return new WP_REST_Response(['error' => 'Erro ao registrar interação do anexo'], 500);
+            }
+            $interacao_id = (int)$wpdb->insert_id;
+        }
+
         $wpdb->insert($a, [
             'ticket_id' => $ticket_id,
             'interacao_id' => $interacao_id,
