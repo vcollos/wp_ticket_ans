@@ -95,22 +95,17 @@
     const result = wrap.querySelector('.ans-ticket-result');
     const clienteField = document.querySelector('#ans-ticket-form .cliente-uni');
     const clienteSelect = document.getElementById('ans-cliente-uniodonto');
-    if(clienteSelect && clienteField){
-      clienteSelect.addEventListener('change', ()=>{
-        const isCliente = clienteSelect.value === 'true';
-        clienteField.style.display = isCliente ? '' : 'none';
-        const input = clienteField.querySelector('input');
-        if(input){ input.required = isCliente; }
-      });
+    if (clienteField) {
+      clienteField.style.display = '';
+      const input = clienteField.querySelector('input');
+      if (input) {
+        input.required = true;
+      }
     }
     const telInput = form.querySelector('input[name="telefone"]');
     const waInput = form.querySelector('input[name="whatsapp"]');
     if(telInput){ telInput.addEventListener('input', ()=>maskPhone(telInput,false)); }
     if(waInput){ waInput.required = true; waInput.addEventListener('input', ()=>maskPhone(waInput,true)); }
-    const depSelect = document.getElementById('ans-departamento');
-    if(depSelect){
-      depSelect.addEventListener('change', ()=>loadAssuntosByDep(depSelect.value));
-    }
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       result.style.display='none';
@@ -126,22 +121,28 @@
         result.innerHTML = '<div class="ans-alert success">Protocolo: <strong>'+json.protocolo+'</strong><br>Seu chamado foi criado com sucesso!</div>';
         result.style.display='block';
         form.reset();
-        loadDepartamentos();
+        await loadDepartamentos();
+        toggleAssistFields();
       }catch(err){ alert(err.message); }
     });
   }
 
   function toggleAssistFields(){
-    const select = document.getElementById('ans-assunto');
+    const depSelect = document.getElementById('ans-departamento');
     const block = document.querySelector('#ans-ticket-form .assist-block');
     const grid = document.querySelector('#ans-ticket-form .ans-grid');
     const ouvidoriaField = document.querySelector('#ans-ticket-form .field-ouvidoria');
     const ouvidoriaInput = document.getElementById('ans-ticket-origem');
     const notice = document.getElementById('ans-ouvidoria-notice');
-    if (!select || !block) return;
-    const isOuvidoria = select.value === 'ouvidoria';
-    const isAssist = select.value === 'assistencial' || select.value === 'atendimento';
-    const assistFields = block.querySelectorAll('.field-assistencial');
+    if (!depSelect) return;
+
+    const selected = (depSelect.selectedOptions && depSelect.selectedOptions[0])
+      ? depSelect.selectedOptions[0]
+      : (depSelect.options && depSelect.options[depSelect.selectedIndex] ? depSelect.options[depSelect.selectedIndex] : null);
+    const depSlug = selected && selected.dataset ? selected.dataset.slug : '';
+    const isOuvidoria = depSlug === 'ouvidoria';
+    const isAssist = depSlug === 'assistencial' || depSlug === 'atendimento';
+    const assistFields = block ? block.querySelectorAll('.field-assistencial') : [];
 
     if (ouvidoriaField) {
       ouvidoriaField.style.display = isOuvidoria ? '' : 'none';
@@ -151,7 +152,9 @@
     }
 
     assistFields.forEach(el=>{ el.style.display = isAssist ? '' : 'none'; });
-    block.style.display = (isAssist) ? 'grid' : 'none';
+    if (block) {
+      block.style.display = (isAssist) ? 'grid' : 'none';
+    }
 
     let noticeBox = notice;
     if (!noticeBox) {
@@ -433,10 +436,6 @@
     trackForm();
     recoverForm();
     toggleAssistFields();
-    const select = document.getElementById('ans-assunto');
-    if (select) {
-        select.addEventListener('change', toggleAssistFields);
-    }
     const depSelect = document.getElementById('ans-departamento');
     if(depSelect){
         depSelect.addEventListener('change', ()=>{ toggleAssistFields(); loadAssuntosByDep(depSelect.value); });

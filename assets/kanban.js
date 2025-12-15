@@ -1,6 +1,7 @@
 (function(){
   const api = (window.ANS_TICKETS_KANBAN && ANS_TICKETS_KANBAN.api) || '';
   const nonce = ANS_TICKETS_KANBAN?.nonce || '';
+  const currentUserId = parseInt(ANS_TICKETS_KANBAN?.user_id||0,10);
   let statuses = [];
   let agentsCache = [];
   let depCache = [];
@@ -34,6 +35,58 @@
     const json = await res.json();
     if(!res.ok) throw new Error(json.error||'Erro');
     return json;
+  }
+
+  function stripHtml(html){
+    const div = document.createElement('div');
+    div.innerHTML = html || '';
+    return div.textContent || '';
+  }
+
+  function openTextModal({title, value, okText='Salvar'}){
+    return new Promise((resolve)=>{
+      const backdrop = document.createElement('div');
+      backdrop.className = 'kanban-modal-backdrop';
+      const modal = document.createElement('div');
+      modal.className = 'kanban-modal center';
+      modal.innerHTML = `
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">${title||''}</div>
+            <div class="modal-meta">Ctrl/⌘ + Enter para salvar</div>
+          </div>
+          <button type="button" class="ans-btn ghost" data-close>Fechar</button>
+        </div>
+        <label>Mensagem</label>
+        <textarea class="modal-text" rows="8" style="width:100%;"></textarea>
+        <div class="modal-actions">
+          <button type="button" class="ans-btn ghost" data-cancel>Cancelar</button>
+          <button type="button" class="ans-btn" data-ok>${okText}</button>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      document.body.appendChild(modal);
+      const textarea = modal.querySelector('.modal-text');
+      textarea.value = value || '';
+      textarea.focus();
+      const cleanup = ()=>{ backdrop.remove(); modal.remove(); };
+      const cancel = ()=>{ cleanup(); resolve(null); };
+      backdrop.addEventListener('click', cancel);
+      modal.querySelector('[data-close]').addEventListener('click', cancel);
+      modal.querySelector('[data-cancel]').addEventListener('click', cancel);
+      modal.querySelector('[data-ok]').addEventListener('click', ()=>{
+        const next = textarea.value.trim();
+        if(!next){ alert('Mensagem obrigatória'); return; }
+        cleanup();
+        resolve(next);
+      });
+      modal.addEventListener('keydown', (ev)=>{
+        if(ev.key === 'Escape'){ cancel(); }
+        if((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter'){
+          modal.querySelector('[data-ok]').click();
+        }
+      });
+    });
   }
 
   function humanTime(dateStr){
@@ -305,12 +358,43 @@
         lastDate = day;
         header = `<div class="ans-date-sep">${day}</div>`;
       }
-      const authorName = i.usuario_nome || (i.autor_tipo==='cliente' ? 'Beneficiário' : 'Atendente');
-      const who = i.autor_tipo==='cliente' ? 'Beneficiário' : `Atendente · ${authorName}`;
-      const cls = i.interno ? 'internal' : (i.autor_tipo==='cliente'?'client':'agent');
+      const isInternal = String(i.interno) === '1' || i.interno === true;
+      const isClient = i.autor_tipo==='cliente';
+      const isMine = (i.autor_tipo==='usuario') && parseInt(i.autor_id||0,10) === currentUserId;
+      const isDeleted = !!i.deleted_at;
+      const isEdited = !!i.edited_at;
+      const authorName = i.usuario_nome || (isClient ? 'Beneficiário' : 'Atendente');
+      const who = isInternal ? `Nota interna · ${authorName}` : (isClient ? 'Beneficiário' : `Atendente · ${authorName}`);
+      const cls = isInternal ? 'internal' : (isClient?'client':'agent');
+      const actions = isMine ? `<span class="chat-actions">
+        ${!isDeleted ? `<button type="button" class="btn ghost" data-action="edit-interaction" data-id="${i.id}">Editar</button>` : ''}
+        ${!isDeleted ? `<button type="button" class="btn warn" data-action="delete-interaction" data-id="${i.id}">Excluir</button>` : ''}
+      </span>` : '';
+      const auditParts = [];
+      if(isEdited){
+        const whoEdit = i.edited_by_nome || 'Atendente';
+        auditParts.push(`Editada por ${whoEdit} em ${formatDate(i.edited_at)}`);
+      }
+      if(isDeleted){
+        const whoDel = i.deleted_by_nome || 'Atendente';
+        auditParts.push(`Excluída por ${whoDel} em ${formatDate(i.deleted_at)}`);
+      }
+      const audit = auditParts.length ? `<div class="chat-audit">${auditParts.join(' • ')}</div>` : '';
+      const original = i.mensagem_original && i.mensagem_original !== i.mensagem
+        ? `<details class="chat-original"><summary>Ver mensagem original</summary><div class="chat-original-body">${i.mensagem_original}</div></details>`
+        : '';
       const attach = map[i.id]||[];
       const attachHtml = attach.length ? `<div class="attach-row">${attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'}</a>`).join('<br>')}</div>` : '';
-      return `${header}<div class="chat-bubble ${cls}"><div class="chat-head"><span>${who}</span><span>${formatDate(i.created_at)}</span></div><div class="chat-body">${i.mensagem||''}</div>${attachHtml}</div>`;
+      return `${header}<div class="chat-bubble ${cls} ${isDeleted?'is-deleted':''}">
+        <div class="chat-head">
+          <span>${who}</span>
+          <span class="chat-right"><span>${formatDate(i.created_at)}</span>${actions}</span>
+        </div>
+        <div class="chat-body">${i.mensagem||''}</div>
+        ${audit}
+        ${original}
+        ${attachHtml}
+      </div>`;
     }).join('') + '</div>';
   }
 
@@ -332,15 +416,16 @@
       const agentOptions = ['<option value="">Sem responsável</option>'].concat(agentsCache.map(a=>`<option value="${a.id}" ${a.id===t.responsavel_id?'selected':''}>${a.name}</option>`)).join('');
       const priOptions = ['baixa','media','alta'].map(p=>`<option value="${p}" ${p===t.prioridade?'selected':''}>${p}</option>`).join('');
       const history = renderHistory(t.interacoes||[], t.anexos||[]);
-      host.innerHTML = `
-        <div class="detail-card">
-          <div class="detail-head">
-            <div>
-              <div class="title">[#${t.protocolo}] ${t.assunto||''}</div>
-              <div class="meta">${t.nome_completo||''} • ${t.departamento_nome||'-'} • Atualizado ${formatDate(t.updated_at)}</div>
-            </div>
-            <button class="btn ghost" id="detail-close">Fechar</button>
-          </div>
+	      const ticketOrigem = t.ticket_origem ? ` • Protocolo anterior: ${t.ticket_origem}` : '';
+	      host.innerHTML = `
+	        <div class="detail-card">
+	          <div class="detail-head">
+	            <div>
+	              <div class="title">[#${t.protocolo}] ${t.assunto||''}</div>
+	              <div class="meta">${t.nome_completo||''} • ${t.departamento_nome||'-'}${ticketOrigem} • Atualizado ${formatDate(t.updated_at)}</div>
+	            </div>
+	            <button class="btn ghost" id="detail-close">Fechar</button>
+	          </div>
           <div class="detail-grid">
             <div class="left">
               <div class="card">
@@ -383,6 +468,43 @@
       host.querySelector('#detail-save').onclick = ()=>saveCombined(t.id);
       host.querySelector('#detail-transfer').onclick = ()=>transferTicket(t.id);
       host.querySelector('#detail-upload-btn').onclick = (ev)=>{ev.preventDefault();uploadFile(t.id);};
+
+      const interactionsById = new Map((t.interacoes||[]).map(i=>[String(i.id), i]));
+      const timeline = host.querySelector('.timeline');
+      if(timeline){
+        timeline.onclick = async (ev)=>{
+          const btn = ev.target?.closest?.('button[data-action][data-id]');
+          if(!btn) return;
+          ev.stopPropagation();
+          const action = btn.dataset.action;
+          const interId = btn.dataset.id;
+          const inter = interactionsById.get(String(interId));
+          if(!inter) return;
+          if(action === 'edit-interaction'){
+            const next = await openTextModal({title:'Editar mensagem', value: stripHtml(inter.mensagem||''), okText:'Salvar edição'});
+            if(!next) return;
+            try{
+              await fetchJSON(`${api}/admin/interacoes/${interId}`,{method:'PUT',headers: headers(),body: JSON.stringify({mensagem: next})});
+              await openDetail(id);
+              reloadBoard();
+            }catch(e){
+              alert(e.message||'Erro ao editar');
+            }
+            return;
+          }
+          if(action === 'delete-interaction'){
+            const ok = confirm('Excluir esta mensagem? Ela continuará aparecendo para auditoria na área do atendente, marcada como excluída.');
+            if(!ok) return;
+            try{
+              await fetchJSON(`${api}/admin/interacoes/${interId}`,{method:'DELETE',headers: headers(false)});
+              await openDetail(id);
+              reloadBoard();
+            }catch(e){
+              alert(e.message||'Erro ao excluir');
+            }
+          }
+        };
+      }
     }catch(e){
       host.innerHTML = `<div class="detail-card error">Erro ao carregar: ${e.message||''}</div>`;
     }

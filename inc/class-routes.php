@@ -171,6 +171,22 @@ class ANS_Tickets_Routes
             },
         ]);
 
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/interacoes/(?P<id>\\d+)', [
+            'methods' => 'PUT',
+            'callback' => [self::class, 'admin_update_interacao'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
+        register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/interacoes/(?P<id>\\d+)', [
+            'methods' => 'DELETE',
+            'callback' => [self::class, 'admin_delete_interacao'],
+            'permission_callback' => function () {
+                return ans_tickets_can_answer();
+            },
+        ]);
+
         register_rest_route(ANS_TICKETS_NAMESPACE, '/admin/stats', [
             'methods' => 'GET',
             'callback' => [self::class, 'admin_stats'],
@@ -351,6 +367,19 @@ class ANS_Tickets_Routes
             }
         }
 
+        $departamento_slug = $wpdb->get_var($wpdb->prepare(
+            "SELECT slug FROM {$table_departamentos} WHERE id=%d AND ativo=1",
+            $departamento_id
+        ));
+        if (!$departamento_slug) {
+            return new WP_REST_Response(['error' => 'Departamento inválido ou inativo'], 400);
+        }
+
+        $ticket_origem = preg_replace('/\\D/', '', (string)$req->get_param('ticket_origem'));
+        if ($departamento_slug === 'ouvidoria' && !$ticket_origem) {
+            return new WP_REST_Response(['error' => 'Para abrir chamado na Ouvidoria, informe o protocolo do atendimento anterior.'], 400);
+        }
+
         $wpdb->query('START TRANSACTION');
         try {
             // Cliente
@@ -399,20 +428,20 @@ class ANS_Tickets_Routes
             // Protocolo
             $protocolo = ans_tickets_protocol();
 
-        $inserted = $wpdb->insert($table_tickets, [
-            'protocolo' => $protocolo,
-            'cliente_id' => $cliente_id,
-            'assunto' => $assunto,
-            'descricao' => wp_kses_post($req->get_param('descricao')),
-            'departamento_id' => $departamento_id,
-            'status' => ans_tickets_initial_status($departamento_id),
-            'prioridade' => 'media',
-            'ticket_origem' => $req->get_param('ticket_origem') ? sanitize_text_field($req->get_param('ticket_origem')) : null,
-            'tipo_de_procedimento' => sanitize_text_field($req->get_param('tipo_de_procedimento')),
-            'prestador' => sanitize_text_field($req->get_param('prestador')),
-            'data_evento' => $req->get_param('data_evento'),
-            'numero_guia' => sanitize_text_field($req->get_param('numero_guia')),
-        ]);
+	        $inserted = $wpdb->insert($table_tickets, [
+	            'protocolo' => $protocolo,
+	            'cliente_id' => $cliente_id,
+	            'assunto' => $assunto,
+	            'descricao' => wp_kses_post($req->get_param('descricao')),
+	            'departamento_id' => $departamento_id,
+	            'status' => ans_tickets_initial_status($departamento_id),
+	            'prioridade' => 'media',
+	            'ticket_origem' => $ticket_origem ? $ticket_origem : null,
+	            'tipo_de_procedimento' => sanitize_text_field($req->get_param('tipo_de_procedimento')),
+	            'prestador' => sanitize_text_field($req->get_param('prestador')),
+	            'data_evento' => $req->get_param('data_evento'),
+	            'numero_guia' => sanitize_text_field($req->get_param('numero_guia')),
+	        ]);
             
             if ($inserted === false) {
                 throw new Exception('Erro ao inserir ticket: ' . $wpdb->last_error);
@@ -500,6 +529,7 @@ class ANS_Tickets_Routes
         $table_tickets = ans_tickets_table('tickets');
         $table_clientes = ans_tickets_table('clientes');
         $table_interacoes = ans_tickets_table('interacoes');
+        $table_anexos = ans_tickets_table('anexos');
         $table_departamentos = ans_tickets_table('departamentos');
 
         $token = $req->get_header('authorization');
@@ -534,17 +564,27 @@ class ANS_Tickets_Routes
         }
 
         $interacoes = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, autor_tipo, autor_id, mensagem, interno, created_at FROM {$table_interacoes} WHERE ticket_id=%d ORDER BY created_at ASC",
+            "SELECT id,
+                    autor_tipo,
+                    autor_id,
+                    CASE WHEN deleted_at IS NOT NULL THEN '[Mensagem removida]' ELSE mensagem END AS mensagem,
+                    created_at
+             FROM {$table_interacoes}
+             WHERE ticket_id=%d AND COALESCE(interno,0)=0
+             ORDER BY created_at ASC",
             $ticket['id']
         ));
+        // Cliente: retornar apenas anexos vinculados a interações públicas (evita vazar anexos internos do atendente).
         $anexos = $wpdb->get_results($wpdb->prepare(
-            "SELECT a.*, p.guid AS url FROM {$table_anexos} a LEFT JOIN {$wpdb->posts} p ON a.attachment_id=p.ID WHERE a.ticket_id=%d ORDER BY a.created_at ASC",
+            "SELECT a.*, p.guid AS url
+             FROM {$table_anexos} a
+             LEFT JOIN {$wpdb->posts} p ON a.attachment_id=p.ID
+             INNER JOIN {$table_interacoes} i ON i.id=a.interacao_id AND i.ticket_id=a.ticket_id AND COALESCE(i.interno,0)=0 AND i.deleted_at IS NULL
+             WHERE a.ticket_id=%d
+             ORDER BY a.created_at ASC",
             $ticket['id']
         ));
-        // Oculta interações internas para o cliente
-        $ticket['interacoes'] = array_values(array_filter($interacoes, function($i){
-            return empty($i->interno);
-        }));
+        $ticket['interacoes'] = $interacoes;
         $ticket['anexos'] = $anexos;
         $ticket['status_label'] = ans_tickets_status_label_for($ticket['status'], (int)$ticket['departamento_id']);
         return $ticket;
@@ -708,7 +748,16 @@ class ANS_Tickets_Routes
         }
         $ticket['status_label'] = ans_tickets_status_label_for($ticket['status'], (int)$ticket['departamento_id']);
         $ticket['interacoes'] = $wpdb->get_results($wpdb->prepare(
-            "SELECT i.*, u.display_name AS usuario_nome FROM {$i} i LEFT JOIN {$wpdb->users} u ON i.autor_id=u.ID WHERE i.ticket_id=%d ORDER BY i.created_at ASC",
+            "SELECT i.*,
+                    u.display_name AS usuario_nome,
+                    ue.display_name AS edited_by_nome,
+                    ud.display_name AS deleted_by_nome
+             FROM {$i} i
+             LEFT JOIN {$wpdb->users} u ON i.autor_id=u.ID
+             LEFT JOIN {$wpdb->users} ue ON i.edited_by=ue.ID
+             LEFT JOIN {$wpdb->users} ud ON i.deleted_by=ud.ID
+             WHERE i.ticket_id=%d
+             ORDER BY i.created_at ASC",
             $id
         ));
         $ticket['anexos'] = $wpdb->get_results($wpdb->prepare(
@@ -716,6 +765,118 @@ class ANS_Tickets_Routes
             $id
         ));
         return $ticket;
+    }
+
+    private static function can_current_user_manage_ticket_departamento(int $departamento_id): bool
+    {
+        if (current_user_can('manage_options') || ans_tickets_can_manage()) {
+            return true;
+        }
+        global $wpdb;
+        $dept_users = ans_tickets_table('departamento_users');
+        $allowed = $wpdb->get_col($wpdb->prepare(
+            "SELECT departamento_id FROM {$dept_users} WHERE user_id=%d",
+            get_current_user_id()
+        ));
+        $allowed = array_values(array_unique(array_filter(array_map('intval', (array)$allowed))));
+        return $allowed && in_array($departamento_id, $allowed, true);
+    }
+
+    public static function admin_update_interacao(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $interacoes = ans_tickets_table('interacoes');
+        $tickets = ans_tickets_table('tickets');
+        $id = (int)$req['id'];
+        $msg = wp_kses_post($req->get_param('mensagem'));
+        if (!$msg) {
+            return new WP_REST_Response(['error' => 'Mensagem obrigatória'], 400);
+        }
+
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT i.id, i.ticket_id, i.autor_tipo, i.autor_id, i.mensagem, i.mensagem_original, i.deleted_at, t.departamento_id
+             FROM {$interacoes} i
+             INNER JOIN {$tickets} t ON t.id=i.ticket_id
+             WHERE i.id=%d",
+            $id
+        ), ARRAY_A);
+        if (!$row) {
+            return new WP_REST_Response(['error' => 'Interação não encontrada'], 404);
+        }
+        if (!self::can_current_user_manage_ticket_departamento((int)$row['departamento_id'])) {
+            return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+        }
+        if (($row['autor_tipo'] ?? '') !== 'usuario') {
+            return new WP_REST_Response(['error' => 'Só é possível editar mensagens do atendente'], 403);
+        }
+        if ((int)($row['autor_id'] ?? 0) !== get_current_user_id()) {
+            return new WP_REST_Response(['error' => 'Você só pode editar mensagens que você escreveu'], 403);
+        }
+        if (!empty($row['deleted_at'])) {
+            return new WP_REST_Response(['error' => 'Esta mensagem já foi excluída'], 409);
+        }
+
+        $data = [
+            'mensagem' => $msg,
+            'edited_at' => current_time('mysql'),
+            'edited_by' => get_current_user_id(),
+        ];
+        if (empty($row['mensagem_original'])) {
+            $data['mensagem_original'] = $row['mensagem'];
+        }
+
+        $updated = $wpdb->update($interacoes, $data, ['id' => $id]);
+        if ($updated === false) {
+            return new WP_REST_Response(['error' => 'Erro ao editar mensagem: ' . $wpdb->last_error], 500);
+        }
+        $wpdb->update($tickets, ['updated_at' => current_time('mysql')], ['id' => (int)$row['ticket_id']]);
+        return new WP_REST_Response(['status' => 'ok'], 200);
+    }
+
+    public static function admin_delete_interacao(WP_REST_Request $req)
+    {
+        global $wpdb;
+        $interacoes = ans_tickets_table('interacoes');
+        $tickets = ans_tickets_table('tickets');
+        $id = (int)$req['id'];
+
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT i.id, i.ticket_id, i.autor_tipo, i.autor_id, i.mensagem, i.mensagem_original, i.deleted_at, t.departamento_id
+             FROM {$interacoes} i
+             INNER JOIN {$tickets} t ON t.id=i.ticket_id
+             WHERE i.id=%d",
+            $id
+        ), ARRAY_A);
+        if (!$row) {
+            return new WP_REST_Response(['error' => 'Interação não encontrada'], 404);
+        }
+        if (!self::can_current_user_manage_ticket_departamento((int)$row['departamento_id'])) {
+            return new WP_REST_Response(['error' => 'Sem acesso ao chamado'], 403);
+        }
+        if (($row['autor_tipo'] ?? '') !== 'usuario') {
+            return new WP_REST_Response(['error' => 'Só é possível excluir mensagens do atendente'], 403);
+        }
+        if ((int)($row['autor_id'] ?? 0) !== get_current_user_id()) {
+            return new WP_REST_Response(['error' => 'Você só pode excluir mensagens que você escreveu'], 403);
+        }
+        if (!empty($row['deleted_at'])) {
+            return new WP_REST_Response(['status' => 'ok'], 200);
+        }
+
+        $data = [
+            'deleted_at' => current_time('mysql'),
+            'deleted_by' => get_current_user_id(),
+        ];
+        if (empty($row['mensagem_original'])) {
+            $data['mensagem_original'] = $row['mensagem'];
+        }
+
+        $updated = $wpdb->update($interacoes, $data, ['id' => $id]);
+        if ($updated === false) {
+            return new WP_REST_Response(['error' => 'Erro ao excluir mensagem: ' . $wpdb->last_error], 500);
+        }
+        $wpdb->update($tickets, ['updated_at' => current_time('mysql')], ['id' => (int)$row['ticket_id']]);
+        return new WP_REST_Response(['status' => 'ok'], 200);
     }
 
     public static function admin_update_ticket(WP_REST_Request $req)
@@ -903,7 +1064,8 @@ class ANS_Tickets_Routes
         if (!$msg) {
             return new WP_REST_Response(['error' => 'Mensagem obrigatória'], 400);
         }
-        $interno = $req->get_param('interno') ? 1 : 0;
+        $internoParam = $req->get_param('interno');
+        $interno = in_array($internoParam, [1, '1', true, 'true'], true) ? 1 : 0;
         $isOwner = !empty($ticket['responsavel_id']) && (int)$ticket['responsavel_id'] === $currentUser;
         if (empty($ticket['responsavel_id'])) {
             $wpdb->update($t, ['responsavel_id' => $currentUser, 'updated_at' => current_time('mysql')], ['id' => (int)$req['id']]);

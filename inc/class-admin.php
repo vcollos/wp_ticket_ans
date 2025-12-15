@@ -9,6 +9,8 @@ class ANS_Tickets_Admin
     {
         add_action('admin_menu', [self::class, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [self::class, 'enqueue_admin_assets']);
+        add_action('admin_post_ans_tickets_export_leads', [self::class, 'export_leads_csv']);
+        add_action('admin_post_ans_tickets_export_timeline', [self::class, 'export_timeline_csv']);
     }
 
     public static function add_admin_menu(): void
@@ -81,11 +83,19 @@ class ANS_Tickets_Admin
         wp_localize_script('ans-tickets-admin', 'ANS_TICKETS_ADMIN', [
             'api' => get_rest_url(null, ANS_TICKETS_NAMESPACE),
             'nonce' => wp_create_nonce('wp_rest'),
+            'user' => wp_get_current_user()->display_name,
+            'user_id' => get_current_user_id(),
         ]);
     }
 
     public static function render_main_page(): void
     {
+        global $wpdb;
+        $departamentos = $wpdb->get_results(
+            "SELECT id, nome FROM " . ans_tickets_table('departamentos') . " ORDER BY ordem_fluxo ASC",
+            ARRAY_A
+        );
+        $nonce = wp_create_nonce('ans_tickets_export');
         ?>
         <div class="wrap">
             <h1>ANS Tickets</h1>
@@ -114,8 +124,283 @@ class ANS_Tickets_Admin
                     </div>
                 </div>
             </div>
+
+            <h2 style="margin-top:24px;">Exportações (CSV)</h2>
+            <p>Gera arquivos CSV para análise, importação no Google Sheets e integração com CRMs.</p>
+
+            <div class="card" style="max-width: 980px; padding: 16px;">
+                <h3 style="margin-top:0;">Leads</h3>
+                <p style="margin-top:0;">Exporta dados do contato + informações do chamado (data/hora, departamento, assunto, status).</p>
+                <form method="get" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+                    <input type="hidden" name="action" value="ans_tickets_export_leads" />
+                    <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>" />
+                    <label>De
+                        <input type="date" name="from" />
+                    </label>
+                    <label>Até
+                        <input type="date" name="to" />
+                    </label>
+                    <label>Departamento
+                        <select name="departamento_id">
+                            <option value="">Todos</option>
+                            <?php foreach ($departamentos as $d): ?>
+                                <option value="<?php echo esc_attr($d['id']); ?>"><?php echo esc_html($d['nome']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>Status (slug)
+                        <input type="text" name="status" placeholder="ex: aberto" />
+                    </label>
+                    <button class="button button-primary" type="submit">Exportar Leads CSV</button>
+                </form>
+            </div>
+
+            <div class="card" style="max-width: 980px; padding: 16px; margin-top: 12px;">
+                <h3 style="margin-top:0;">Linha do tempo (chamado)</h3>
+                <p style="margin-top:0;">Exporta a timeline completa de um chamado específico (inclui auditoria de edição/exclusão).</p>
+                <form method="get" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+                    <input type="hidden" name="action" value="ans_tickets_export_timeline" />
+                    <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>" />
+                    <label>Protocolo
+                        <input type="text" name="protocolo" placeholder="ex: 12345620251212000001" />
+                    </label>
+                    <label>ID do ticket (opcional)
+                        <input type="number" name="ticket_id" min="1" />
+                    </label>
+                    <button class="button button-primary" type="submit">Exportar Timeline CSV</button>
+                </form>
+            </div>
         </div>
         <?php
+    }
+
+    private static function export_require_admin(): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Acesso restrito.');
+        }
+        if (!isset($_GET['_wpnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'ans_tickets_export')) {
+            wp_die('Nonce inválido.');
+        }
+    }
+
+    private static function csv_send_headers(string $filename): void
+    {
+        nocache_headers();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('X-Content-Type-Options: nosniff');
+    }
+
+    public static function export_leads_csv(): void
+    {
+        self::export_require_admin();
+        global $wpdb;
+        $tickets = ans_tickets_table('tickets');
+        $clientes = ans_tickets_table('clientes');
+        $departamentos = ans_tickets_table('departamentos');
+
+        $from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $to = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $departamento_id = isset($_GET['departamento_id']) ? (int)$_GET['departamento_id'] : 0;
+        $status = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
+
+        $where = [];
+        $params = [];
+        if ($from) {
+            $where[] = 'DATE(t.created_at) >= %s';
+            $params[] = $from;
+        }
+        if ($to) {
+            $where[] = 'DATE(t.created_at) <= %s';
+            $params[] = $to;
+        }
+        if ($departamento_id) {
+            $where[] = 't.departamento_id = %d';
+            $params[] = $departamento_id;
+        }
+        if ($status) {
+            $where[] = 't.status = %s';
+            $params[] = $status;
+        }
+
+        $sql = "SELECT
+                    t.id AS ticket_id,
+                    t.protocolo,
+                    t.assunto,
+                    t.status,
+                    t.departamento_id,
+                    d.nome AS departamento_nome,
+                    t.created_at,
+                    c.nome_completo,
+                    c.email,
+                    c.telefone,
+                    c.whatsapp,
+                    c.documento
+                FROM {$tickets} t
+                INNER JOIN {$clientes} c ON c.id=t.cliente_id
+                LEFT JOIN {$departamentos} d ON d.id=t.departamento_id";
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+        $sql .= ' ORDER BY t.created_at DESC';
+        $prepared = $params ? $wpdb->prepare($sql, $params) : $sql;
+        $rows = $wpdb->get_results($prepared, ARRAY_A);
+
+        $stamp = current_time('Ymd-His');
+        self::csv_send_headers("ans-leads-{$stamp}.csv");
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        $delimiter = ';';
+        fputcsv($out, ['ticket_id', 'protocolo', 'data', 'hora', 'departamento', 'assunto', 'status', 'status_label', 'nome', 'email', 'telefone', 'whatsapp', 'documento'], $delimiter);
+        foreach ($rows as $r) {
+            $created = (string)($r['created_at'] ?? '');
+            $date = $created ? explode(' ', $created)[0] : '';
+            $time = $created ? (explode(' ', $created)[1] ?? '') : '';
+            $statusLabel = ans_tickets_status_label_for((string)$r['status'], (int)($r['departamento_id'] ?? 0));
+            fputcsv($out, [
+                $r['ticket_id'] ?? '',
+                $r['protocolo'] ?? '',
+                $date,
+                $time,
+                $r['departamento_nome'] ?? '',
+                $r['assunto'] ?? '',
+                $r['status'] ?? '',
+                $statusLabel,
+                $r['nome_completo'] ?? '',
+                $r['email'] ?? '',
+                $r['telefone'] ?? '',
+                $r['whatsapp'] ?? '',
+                $r['documento'] ?? '',
+            ], $delimiter);
+        }
+        fclose($out);
+        exit;
+    }
+
+    public static function export_timeline_csv(): void
+    {
+        self::export_require_admin();
+        global $wpdb;
+        $tickets = ans_tickets_table('tickets');
+        $clientes = ans_tickets_table('clientes');
+        $interacoes = ans_tickets_table('interacoes');
+        $anexos = ans_tickets_table('anexos');
+
+        $ticket_id = isset($_GET['ticket_id']) ? (int)$_GET['ticket_id'] : 0;
+        $protocolo = isset($_GET['protocolo']) ? sanitize_text_field(wp_unslash($_GET['protocolo'])) : '';
+        if (!$ticket_id && $protocolo) {
+            $ticket_id = (int)$wpdb->get_var($wpdb->prepare("SELECT id FROM {$tickets} WHERE protocolo=%s", $protocolo));
+        }
+        if (!$ticket_id) {
+            wp_die('Informe um protocolo ou ticket_id válido.');
+        }
+
+        $ticket = $wpdb->get_row($wpdb->prepare(
+            "SELECT t.id, t.protocolo, t.assunto, t.status, t.departamento_id, c.nome_completo
+             FROM {$tickets} t
+             INNER JOIN {$clientes} c ON c.id=t.cliente_id
+             WHERE t.id=%d",
+            $ticket_id
+        ), ARRAY_A);
+        if (!$ticket) {
+            wp_die('Ticket não encontrado.');
+        }
+
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT i.*,
+                    u.display_name AS autor_nome,
+                    ue.display_name AS edited_by_nome,
+                    ud.display_name AS deleted_by_nome
+             FROM {$interacoes} i
+             LEFT JOIN {$wpdb->users} u ON u.ID=i.autor_id
+             LEFT JOIN {$wpdb->users} ue ON ue.ID=i.edited_by
+             LEFT JOIN {$wpdb->users} ud ON ud.ID=i.deleted_by
+             WHERE i.ticket_id=%d
+             ORDER BY i.created_at ASC",
+            $ticket_id
+        ), ARRAY_A);
+
+        $attRows = $wpdb->get_results($wpdb->prepare(
+            "SELECT a.id, a.interacao_id, a.mime_type, a.tamanho_bytes, a.created_at, p.guid AS url
+             FROM {$anexos} a
+             LEFT JOIN {$wpdb->posts} p ON p.ID=a.attachment_id
+             WHERE a.ticket_id=%d
+             ORDER BY a.created_at ASC",
+            $ticket_id
+        ), ARRAY_A);
+        $attMap = [];
+        foreach ($attRows as $a) {
+            $key = $a['interacao_id'] ? (string)$a['interacao_id'] : 'ticket';
+            if (!isset($attMap[$key])) {
+                $attMap[$key] = [];
+            }
+            $attMap[$key][] = $a['url'] ?: '';
+        }
+
+        $stamp = current_time('Ymd-His');
+        $safeProto = preg_replace('/[^A-Za-z0-9-]/', '', (string)$ticket['protocolo']);
+        self::csv_send_headers("ans-timeline-{$safeProto}-{$stamp}.csv");
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        $delimiter = ';';
+        fputcsv($out, [
+            'ticket_id',
+            'protocolo',
+            'cliente',
+            'assunto',
+            'status',
+            'interacao_id',
+            'created_at',
+            'autor_tipo',
+            'autor_nome',
+            'interno',
+            'mensagem',
+            'mensagem_original',
+            'edited_at',
+            'edited_by',
+            'edited_by_nome',
+            'deleted_at',
+            'deleted_by',
+            'deleted_by_nome',
+            'anexos_urls',
+        ], $delimiter);
+        foreach ($rows as $r) {
+            $autorTipo = (string)($r['autor_tipo'] ?? '');
+            $autorNome = '';
+            if ($autorTipo === 'cliente') {
+                $autorNome = 'Beneficiário';
+            } elseif ($autorTipo === 'sistema') {
+                $autorNome = 'Sistema';
+            } else {
+                $autorNome = (string)($r['autor_nome'] ?? 'Atendente');
+            }
+            $attKey = (string)($r['id'] ?? '');
+            $urls = isset($attMap[$attKey]) ? implode(' | ', array_filter($attMap[$attKey])) : '';
+            fputcsv($out, [
+                $ticket['id'],
+                $ticket['protocolo'],
+                $ticket['nome_completo'],
+                $ticket['assunto'],
+                $ticket['status'],
+                $r['id'] ?? '',
+                $r['created_at'] ?? '',
+                $autorTipo,
+                $autorNome,
+                (int)($r['interno'] ?? 0),
+                $r['mensagem'] ?? '',
+                $r['mensagem_original'] ?? '',
+                $r['edited_at'] ?? '',
+                $r['edited_by'] ?? '',
+                $r['edited_by_nome'] ?? '',
+                $r['deleted_at'] ?? '',
+                $r['deleted_by'] ?? '',
+                $r['deleted_by_nome'] ?? '',
+                $urls,
+            ], $delimiter);
+        }
+        fclose($out);
+        exit;
     }
 
     public static function render_list_page(): void

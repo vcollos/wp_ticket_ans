@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ANS Tickets
  * Description: Sistema de tickets (ANS) com formulários, acompanhamento e ouvidoria. Cria tabelas próprias e usa mídia do WordPress para anexos.
- * Version: 0.7.12
+ * Version: 1.0.0
  * Author: Collos Ltda
  */
 
@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('ANS_TICKETS_VERSION', '0.7.12');
+define('ANS_TICKETS_VERSION', '1.0.0');
 
 define('ANS_TICKETS_PATH', plugin_dir_path(__FILE__));
 define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
@@ -18,18 +18,6 @@ define('ANS_TICKETS_URL', plugin_dir_url(__FILE__));
 define('ANS_TICKETS_NAMESPACE', 'ans-tickets/v1');
 
 define('ANS_TICKETS_OPTION', 'ans_tickets_settings');
-
-spl_autoload_register(function ($class) {
-    if (strpos($class, 'ANS\\Tickets\\') !== 0) {
-        return;
-    }
-    $relative = str_replace('ANS\\Tickets\\', '', $class);
-    $relativePath = str_replace('\\', '/', $relative);
-    $file = ANS_TICKETS_PATH . strtolower($relativePath) . '.php';
-    if (file_exists($file)) {
-        require_once $file;
-    }
-});
 
 require_once ANS_TICKETS_PATH . 'inc/class-installer.php';
 require_once ANS_TICKETS_PATH . 'inc/class-routes.php';
@@ -87,7 +75,7 @@ add_shortcode('ans_ticket_form', function () {
                 <label class="half">Documento (CPF/CNPJ)
                     <input name="documento" required>
                 </label>
-                <label class="half cliente-uni" style="display:none">Data de Nascimento
+                <label class="half cliente-uni">Data de Nascimento
                     <input name="data_nascimento" type="date">
                 </label>
                 <label class="full">Departamento que deseja falar
@@ -101,7 +89,7 @@ add_shortcode('ans_ticket_form', function () {
                     </select>
                 </label>
                 <label class="full field-ouvidoria" style="display:none">Protocolo anterior
-                    <input name="ticket_origem" id="ans-ticket-origem">
+                    <input name="ticket_origem" id="ans-ticket-origem" inputmode="numeric" pattern="[0-9]*" placeholder="Informe o número do protocolo do atendimento anterior">
                 </label>
                 <div id="ans-ouvidoria-notice" class="ans-ouvidoria-notice" style="display:none"></div>
                 <div class="assist-block" style="display:none">
@@ -144,6 +132,8 @@ add_shortcode('ans_ticket_kanban', function () {
         'nonce' => wp_create_nonce('wp_rest'),
         'status' => [], // deixa o JS puxar status custom (global/depto)
         'prioridades' => ans_tickets_default_prioridades(),
+        'user_id' => get_current_user_id(),
+        'user' => wp_get_current_user()->display_name,
     ]);
     ob_start();
     ?>
@@ -224,7 +214,7 @@ add_shortcode('ans_ticket_dashboard', function () {
         }
     }
 
-    if (!is_user_logged_in() || !current_user_can('ans_answer_tickets')) {
+    if (!is_user_logged_in() || !ans_tickets_can_answer()) {
         ob_start();
         ?>
         <div class="ans-ticket-card">
@@ -276,6 +266,8 @@ add_shortcode('ans_ticket_dashboard', function () {
         'nonce' => wp_create_nonce('wp_rest'),
         'status' => [],
         'prioridades' => ans_tickets_default_prioridades(),
+        'user_id' => get_current_user_id(),
+        'user' => wp_get_current_user()->display_name,
     ]);
     ob_start();
     ?>

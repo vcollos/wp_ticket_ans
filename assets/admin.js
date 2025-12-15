@@ -92,6 +92,57 @@
     return json;
   }
 
+  function stripHtml(html){
+    const div = document.createElement('div');
+    div.innerHTML = html || '';
+    return div.textContent || '';
+  }
+
+  function openTextModal({title, value, okText='Salvar'}){
+    return new Promise((resolve)=>{
+      const backdrop = document.createElement('div');
+      backdrop.className = 'ans-modal-backdrop';
+      const modal = document.createElement('div');
+      modal.className = 'ans-modal';
+      modal.innerHTML = `
+        <div class="ans-modal-head">
+          <div class="ans-modal-title">${title||''}</div>
+          <button type="button" class="btn btn-ghost btn-small" data-close>Fechar</button>
+        </div>
+        <textarea class="ans-modal-text" rows="8"></textarea>
+        <div class="ans-modal-actions">
+          <button type="button" class="btn btn-ghost" data-cancel>Cancelar</button>
+          <button type="button" class="btn btn-primary" data-ok>${okText}</button>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      document.body.appendChild(modal);
+      const textarea = modal.querySelector('.ans-modal-text');
+      textarea.value = value || '';
+      textarea.focus();
+      const cleanup = ()=>{
+        backdrop.remove();
+        modal.remove();
+      };
+      const cancel = ()=>{ cleanup(); resolve(null); };
+      backdrop.addEventListener('click', cancel);
+      modal.querySelector('[data-close]').addEventListener('click', cancel);
+      modal.querySelector('[data-cancel]').addEventListener('click', cancel);
+      modal.querySelector('[data-ok]').addEventListener('click', ()=>{
+        const next = textarea.value.trim();
+        if(!next){ alert('Mensagem obrigatória'); return; }
+        cleanup();
+        resolve(next);
+      });
+      modal.addEventListener('keydown', (ev)=>{
+        if(ev.key === 'Escape'){ cancel(); }
+        if((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter'){
+          modal.querySelector('[data-ok]').click();
+        }
+      });
+    });
+  }
+
   async function getQuickReplies(departamentoId){
     try{
       const qs = departamentoId ? `?departamento_id=${departamentoId}` : '';
@@ -284,15 +335,6 @@
     }).join('')+'</ul>';
   }
 
-  function renderBubble(i){
-    const cls = i.interno ? 'chat-internal' : (i.autor_tipo==='cliente'?'chat-client':'chat-agent');
-    const who = i.autor_tipo==='cliente'?'Cliente':(i.usuario_nome||'Atendente');
-    const icon = i.interno ? '📝' : (i.autor_tipo==='cliente'?'👤':'🎧');
-    const tag = i.interno ? '<span class="ans-tag note">Nota interna 🔒</span>' : (i.autor_tipo==='cliente'?'<span class="ans-tag client">Cliente</span>':'<span class="ans-tag agent">Atendente</span>');
-    const safeMsg = i.mensagem || '';
-    return `<div class="ans-chat-bubble ${cls}"><div class="ans-chat-top">${tag}<span class="bubble-author">${icon} ${who}</span><span class="bubble-date">${formatDate(i.created_at)}</span></div><div class="bubble-body">${safeMsg}</div></div>`;
-  }
-
   function renderHistory(list, attachments){
     const orderedAttachments = [...(attachments||[])].sort((a,b)=>{
       const da = new Date((a.created_at||'').replace(' ','T'));
@@ -319,18 +361,46 @@
       const items = byDay[day].map(i=>{
         const isInternal = String(i.interno) === '1' || i.interno === true;
         const isClient = (i.autor_tipo || '') === 'cliente';
+        const isMine = (i.autor_tipo || '') === 'usuario' && parseInt(i.autor_id||0,10) === parseInt(ANS_TICKETS_ADMIN.user_id||0,10);
+        const isDeleted = !!i.deleted_at;
+        const isEdited = !!i.edited_at;
         const authorName = i.usuario_nome || (isClient ? 'Beneficiário' : 'Atendente');
         const role = isInternal ? `Nota interna · ${authorName}` : (isClient ? `Beneficiário` : `Atendente · ${authorName}`);
         const roleClass = isInternal ? 'pill-note' : (isClient ? 'pill-client' : 'pill-agent');
+        const itemClass = isInternal ? 'is-note' : (isClient ? 'is-client' : 'is-agent');
+        const auditParts = [];
+        if(isEdited){
+          const whoEdit = i.edited_by_nome || 'Atendente';
+          auditParts.push(`Editada por ${whoEdit} em ${formatDate(i.edited_at)}`);
+        }
+        if(isDeleted){
+          const whoDel = i.deleted_by_nome || 'Atendente';
+          auditParts.push(`Excluída por ${whoDel} em ${formatDate(i.deleted_at)}`);
+        }
+        const auditHtml = auditParts.length ? `<div class="ans-audit">${auditParts.join(' • ')}</div>` : '';
+        const original = i.mensagem_original && i.mensagem_original !== i.mensagem
+          ? `<details class="ans-original"><summary>Ver mensagem original</summary><div class="ans-original-body">${i.mensagem_original}</div></details>`
+          : '';
+        const actions = isMine
+          ? `<div class="hist-actions">
+              ${!isDeleted ? `<button type="button" class="btn btn-ghost btn-small" data-action="edit-interaction" data-id="${i.id}">Editar</button>` : ''}
+              ${!isDeleted ? `<button type="button" class="btn btn-warning btn-small" data-action="delete-interaction" data-id="${i.id}">Excluir</button>` : ''}
+            </div>`
+          : '';
         const attach = map[i.id]||[];
         const attachHtml = attach.length ? `<div class="ans-history-attach">${attach.map(a=>`<a href="${a.url}" target="_blank" rel="noopener">${a.mime_type||'Arquivo'}</a>`).join('<br>')}</div>` : '';
         return `
-          <div class="ans-history-item">
+          <div class="ans-history-item ${itemClass} ${isDeleted ? 'is-deleted' : ''}">
             <div class="ans-history-top">
               <span class="pill ${roleClass}">${role}</span>
+              <div class="hist-right">
+                ${actions}
                 <span class="hist-date">${formatDate(i.created_at)}</span>
               </div>
+              </div>
               <div class="ans-history-body">${i.mensagem||''}</div>
+              ${auditHtml}
+              ${original}
               ${attachHtml}
             </div>
           `;
@@ -370,6 +440,7 @@
     const respName = t.responsavel_nome || 'Não atribuído';
     const history = renderHistory(t.interacoes||[], t.anexos||[]);
     const draftKey = `ans_draft_${t.id}`;
+    const ticketOrigem = t.ticket_origem ? ` • Protocolo anterior: ${t.ticket_origem}` : '';
     let html=`
       <div id="ans-feedback" class="ans-feedback" aria-live="polite"></div>
       <div class="ans-ticket-bar">
@@ -381,7 +452,7 @@
             <span class="ans-badge ghost">Depto: ${depName}</span>
             <span class="ans-badge ghost">Atualizado ${formatDate(t.updated_at)}</span>
           </div>
-          <div class="ans-ticket-meta secondary">Cliente: <strong>${t.nome_completo||''}</strong> • Doc: ${t.documento||'-'} • Criado em ${formatDate(t.created_at)}</div>
+          <div class="ans-ticket-meta secondary">Cliente: <strong>${t.nome_completo||''}</strong> • Doc: ${t.documento||'-'}${ticketOrigem} • Criado em ${formatDate(t.created_at)}</div>
         </div>
         <div class="ans-ticket-sla">
           <div class="ans-sla-text">SLA do depto (${t.departamento_sla_hours||'—'}h)</div>
@@ -473,6 +544,42 @@
     const timeline=document.getElementById('ans-chat-timeline');
     if(timeline){ timeline.scrollTop = timeline.scrollHeight; }
     renderSlaBar(t);
+
+    const interactionsById = new Map((t.interacoes||[]).map(i=>[String(i.id), i]));
+    const historyHost = document.getElementById('ans-chat-timeline');
+    if(historyHost){
+      historyHost.onclick = async (ev)=>{
+        const btn = ev.target?.closest?.('button[data-action][data-id]');
+        if(!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        const inter = interactionsById.get(String(id));
+        if(!inter) return;
+        if(action === 'edit-interaction'){
+          const next = await openTextModal({title:'Editar mensagem', value: stripHtml(inter.mensagem||''), okText:'Salvar edição'});
+          if(!next) return;
+          try{
+            await fetchJSON(`${api}/admin/interacoes/${id}`,{method:'PUT',headers,body:JSON.stringify({mensagem: next})});
+            await loadTicket(t.id);
+            announce('Mensagem editada.');
+          }catch(e){
+            alert(e.message||'Erro ao editar');
+          }
+          return;
+        }
+        if(action === 'delete-interaction'){
+          const ok = confirm('Excluir esta mensagem? Ela continuará aparecendo para auditoria na área do atendente, marcada como excluída.');
+          if(!ok) return;
+          try{
+            await fetchJSON(`${api}/admin/interacoes/${id}`,{method:'DELETE',headers: {'X-WP-Nonce': nonce}});
+            await loadTicket(t.id);
+            announce('Mensagem excluída (soft delete).', 'info');
+          }catch(e){
+            alert(e.message||'Erro ao excluir');
+          }
+        }
+      };
+    }
 
     function saveDraft(){
       if(textarea){ localStorage.setItem(draftKey, textarea.value); }

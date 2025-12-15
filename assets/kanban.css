@@ -51,9 +51,20 @@
 .btn.info{background:#3a7bd5;border-color:#3a7bd5;color:#fff}
 .timeline .chat-bubble{background:#fff;border:1px solid #ededed;border-radius:10px;padding:8px;margin-top:8px}
 .timeline .chat-bubble .chat-head{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px}
-.timeline .chat-bubble .chat-body{font-size:14px}
+.timeline .chat-bubble .chat-body{font-size:14px;white-space:pre-wrap}
+.timeline .chat-bubble .chat-right{display:flex;align-items:center;gap:8px}
+.timeline .chat-bubble .chat-actions{display:inline-flex;gap:6px}
+.timeline .chat-bubble .chat-actions .btn{padding:4px 8px;font-size:12px}
+.timeline .chat-bubble .chat-audit{margin-top:6px;font-size:12px;color:#666;font-weight:700}
+.timeline .chat-bubble .chat-original summary{cursor:pointer;font-weight:800;color:#333;margin-top:6px}
+.timeline .chat-bubble .chat-original-body{margin-top:6px;padding:8px;border:1px dashed #e0e0e0;border-radius:8px;background:rgba(255,255,255,0.65);white-space:pre-wrap}
+.timeline .chat-bubble.is-deleted{opacity:0.9}
+.timeline .chat-bubble.is-deleted .chat-body{text-decoration:line-through}
 .timeline .chat-bubble.internal{background:#fff7d6}
 .timeline .chat-bubble.client{background:#e8f7ff}
 .timeline .chat-bubble.agent{background:#f2edff}
 .ans-date-sep{margin-top:8px;font-weight:800;text-align:center;color:#555}
 .attach-row{margin-top:6px}
+
+.kanban-modal.center{left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(720px,92vw)}
+.kanban-modal .modal-text{width:100%;border:1px solid #dcdcdc;border-radius:8px;padding:8px;resize:vertical}

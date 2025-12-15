@@ -85,10 +85,17 @@ CREATE TABLE {$prefix}interacoes (
     autor_tipo VARCHAR(20) NOT NULL,
     autor_id BIGINT UNSIGNED,
     mensagem TEXT NOT NULL,
+    mensagem_original TEXT NULL,
+    edited_at DATETIME NULL,
+    edited_by BIGINT UNSIGNED NULL,
+    deleted_at DATETIME NULL,
+    deleted_by BIGINT UNSIGNED NULL,
     interno BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY ticket_id (ticket_id)
+    KEY ticket_id (ticket_id),
+    KEY edited_by (edited_by),
+    KEY deleted_by (deleted_by)
 ) $charset;
 
 CREATE TABLE {$prefix}anexos (
@@ -276,8 +283,15 @@ CREATE TABLE {$prefix}respostas_rapidas_links (
     {
         global $wpdb;
         $tickets = ans_tickets_table('tickets');
-        $cols = $wpdb->get_col("SHOW COLUMNS FROM {$tickets}");
-        return in_array('responsavel_id', $cols, true);
+        $interacoes = ans_tickets_table('interacoes');
+        $colsTickets = $wpdb->get_col("SHOW COLUMNS FROM {$tickets}");
+        $colsInter = $wpdb->get_col("SHOW COLUMNS FROM {$interacoes}");
+        return in_array('responsavel_id', $colsTickets, true)
+            && in_array('mensagem_original', $colsInter, true)
+            && in_array('edited_at', $colsInter, true)
+            && in_array('edited_by', $colsInter, true)
+            && in_array('deleted_at', $colsInter, true)
+            && in_array('deleted_by', $colsInter, true);
     }
 
     private static function update_database(): void
@@ -317,6 +331,24 @@ CREATE TABLE {$prefix}respostas_rapidas_links (
         $cols_tickets = $wpdb->get_col("SHOW COLUMNS FROM {$prefix}tickets");
         if (!in_array('responsavel_id', $cols_tickets)) {
             $wpdb->query("ALTER TABLE {$prefix}tickets ADD COLUMN responsavel_id BIGINT UNSIGNED NULL AFTER departamento_id");
+        }
+
+        // Auditoria de interações (edição/exclusão sem apagar do histórico)
+        $cols_inter = $wpdb->get_col("SHOW COLUMNS FROM {$prefix}interacoes");
+        if (!in_array('mensagem_original', $cols_inter, true)) {
+            $wpdb->query("ALTER TABLE {$prefix}interacoes ADD COLUMN mensagem_original TEXT NULL AFTER mensagem");
+        }
+        if (!in_array('edited_at', $cols_inter, true)) {
+            $wpdb->query("ALTER TABLE {$prefix}interacoes ADD COLUMN edited_at DATETIME NULL AFTER mensagem_original");
+        }
+        if (!in_array('edited_by', $cols_inter, true)) {
+            $wpdb->query("ALTER TABLE {$prefix}interacoes ADD COLUMN edited_by BIGINT UNSIGNED NULL AFTER edited_at");
+        }
+        if (!in_array('deleted_at', $cols_inter, true)) {
+            $wpdb->query("ALTER TABLE {$prefix}interacoes ADD COLUMN deleted_at DATETIME NULL AFTER edited_by");
+        }
+        if (!in_array('deleted_by', $cols_inter, true)) {
+            $wpdb->query("ALTER TABLE {$prefix}interacoes ADD COLUMN deleted_by BIGINT UNSIGNED NULL AFTER deleted_at");
         }
 
         // Tabela respostas rápidas

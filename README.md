@@ -1,4 +1,4 @@
-# ANS Tickets (Uniodonto) – v0.7.12
+# ANS Tickets (Uniodonto) – v1.0.0
 
 Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-end para beneficiários e painel (wp-admin ou página pública) para atendentes.
 
@@ -54,7 +54,7 @@ Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-en
 3. Recuperar: CPF + data de nascimento → lista todos os chamados e abre cada um.
 
 ## Campos e regras
-- **Ouvidoria**: campo “Protocolo anterior” obrigatório ao escolher assunto ouvidoria + aviso com prazos/contato.
+- **Ouvidoria**: campo “Protocolo anterior” obrigatório ao escolher o departamento Ouvidoria + aviso com prazos/contato.
 - **Assistencial/Atendimento**: bloco adicional com tipo de procedimento, prestador, data do evento e número de guia.
 - **Cliente Uniodonto**: ao marcar “Sim”, exige data de nascimento.
 - **Prioridade**: padrão média; pode ser alterada no dashboard de atendentes.
@@ -69,18 +69,25 @@ Sistema de chamados inspirado em Monday/Material Design para WordPress. Front-en
 - Admin/atendente: `GET/POST /admin/departamentos`, `GET /admin/departamentos/{id}`, `PUT/DELETE /admin/departamentos/{id}`, `GET /admin/tickets`, `GET/PATCH /admin/tickets/{id}`, `POST /admin/tickets/{id}/reply`, `POST /admin/tickets/{id}/transfer`, `POST /admin/upload`, `GET/POST /admin/settings`, `GET /admin/stats`, `GET /admin/agents`, `GET/POST /admin/respostas-rapidas`, `PUT/DELETE /admin/respostas-rapidas/{id}`, `GET/POST /admin/filtros-salvos`, `PUT/DELETE /admin/filtros-salvos/{id}`, `GET/POST /admin/kanban/filters`, `GET /admin/kanban/tickets`, `GET /admin/reports/v2`, `GET/POST /admin/assuntos`, `PUT/DELETE /admin/assuntos/{id}`, `GET/POST /admin/status-custom` (com flags inicial/final resolvido/final não resolvido), `PUT/DELETE /admin/status-custom/{id}`.
 - Autenticação: beneficiário via token emitido em `/login`; atendente via login WP + nonce para rotas admin.
 
+## Exportações (CSV)
+- wp-admin → **ANS Tickets**: seção **Exportações (CSV)**.
+- **Leads**: exporta contato + dados do chamado (data/hora, depto, assunto, status).
+- **Timeline (chamado)**: exporta linha do tempo completa com auditoria (edição/exclusão) e URLs de anexos.
+
 ## Banco de dados
 Tabelas personalizadas: `ans_operadora`, `ans_departamentos`, `ans_clientes` (whatsapp, data_nascimento, cliente_uniodonto), `ans_tickets` (prioridade, departamento_id, responsavel_id, ticket_origem, campos assistenciais), `ans_interacoes`, `ans_anexos`, `ans_departamento_users`, `ans_respostas_rapidas` (+ vinculações em `ans_respostas_rapidas_links`), `ans_filtros_salvos`, `ans_assuntos`, `ans_status_custom`. Migrações: `inc/class-installer.php`.
 
 ## Estilo e design system
-- Paleta Uniodonto/Collos (vinho, roxos, ciano, lima, goiaba). Tokens em `assets/design-system.md`.
+- Paleta Uniodonto/Collos (vinho, roxos, ciano, lima, goiaba) definida via variáveis CSS em `assets/admin.css`.
 - Layout Monday-like: cards, badges de status, grids responsivos, filtros com chips, sombras suaves.
 
 ## Permissões e segurança
 - Roles `ans_agent` e `ans_supervisor`; admins/editores recebem caps na ativação.
+- Administradores (`manage_options`) têm acesso total ao painel/rotas admin, independente de vínculo a departamento.
 - Dashboard público exige login WP e `ans_answer_tickets`.
 - Tokens de cliente expiram em 1h. Upload restrito a mimes permitidos e limite de 5MB.
+- Área do atendente: edição/exclusão de mensagens do próprio atendente é **auditável** (soft delete + guarda da mensagem original); mensagens do cliente não podem ser editadas/excluídas.
 - Cron de SLA a cada 5 minutos: registra nota interna e notifica responsável quando o SLA estoura (sem forçar um status fixo).
 
 ## Versão
-- Atual: **0.7.12**
+- Atual: **1.0.0**

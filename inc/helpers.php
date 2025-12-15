@@ -53,12 +53,12 @@ function ans_tickets_max_file_size(): int
 
 function ans_tickets_can_answer(): bool
 {
-    return current_user_can('ans_answer_tickets') || current_user_can('ans_manage_tickets');
+    return current_user_can('manage_options') || current_user_can('ans_answer_tickets') || current_user_can('ans_manage_tickets');
 }
 
 function ans_tickets_can_manage(): bool
 {
-    return current_user_can('ans_manage_tickets');
+    return current_user_can('manage_options') || current_user_can('ans_manage_tickets');
 }
 
 function ans_tickets_default_prioridades(): array
